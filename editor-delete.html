@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>슬라이드 삭제 - PDF 슬라이드 편집기</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0a0a1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── 툴바 ── */
+        .toolbar {
+            background: rgba(15, 15, 30, 0.95);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            padding: 0 20px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .btn-back {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+            color: #c4c8d8;
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .btn-back:hover { background: rgba(255,255,255,0.1); }
+
+        .toolbar-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #e0e0e0;
+            flex: 1;
+        }
+        .toolbar-title span { color: #fbbf24; }
+
+        .toolbar-actions { display: flex; gap: 8px; align-items: center; }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.06);
+            color: #c4c8d8;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn:hover { background: rgba(255,255,255,0.1); }
+
+        .btn-danger {
+            background: rgba(239,68,68,0.2);
+            border-color: rgba(239,68,68,0.3);
+            color: #f87171;
+        }
+        .btn-danger:hover { background: rgba(239,68,68,0.3); }
+
+        .btn-primary {
+            background: rgba(59,130,246,0.2);
+            border-color: rgba(59,130,246,0.3);
+            color: #60a5fa;
+        }
+        .btn-primary:hover { background: rgba(59,130,246,0.3); }
+
+        .btn-warning {
+            background: rgba(245,158,11,0.2);
+            border-color: rgba(245,158,11,0.3);
+            color: #fbbf24;
+        }
+        .btn-warning:hover { background: rgba(245,158,11,0.3); }
+
+        .selection-count {
+            font-size: 13px;
+            color: #9ca3af;
+            padding: 0 8px;
+        }
+
+        .selection-count strong {
+            color: #fbbf24;
+        }
+
+        /* ── 메인 ── */
+        .main-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ── 좌측 작업 패널 ── */
+        .action-panel {
+            width: 280px;
+            background: rgba(15,15,30,0.6);
+            border-right: 1px solid rgba(255,255,255,0.06);
+            overflow-y: auto;
+            padding: 20px 16px;
+            flex-shrink: 0;
+        }
+
+        .info-box {
+            background: rgba(245,158,11,0.06);
+            border: 1px solid rgba(245,158,11,0.12);
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 20px;
+        }
+        .info-box p {
+            font-size: 13px;
+            color: #d4a574;
+            line-height: 1.6;
+        }
+        .info-box strong { color: #fbbf24; }
+
+        .panel-section {
+            margin-bottom: 24px;
+        }
+
+        .panel-section-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #6b7280;
+            margin-bottom: 12px;
+        }
+
+        .action-btn {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.04);
+            color: #c4c8d8;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            text-align: left;
+        }
+        .action-btn:hover { background: rgba(255,255,255,0.08); }
+
+        .action-btn-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .action-btn-text {
+            flex: 1;
+        }
+        .action-btn-text strong {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+        .action-btn-text span {
+            font-size: 11px;
+            color: #6b7280;
+        }
+
+        .delete-btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 10px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #dc2626, #b91c1c);
+            color: white;
+            margin-bottom: 10px;
+        }
+        .delete-btn:hover { box-shadow: 0 4px 20px rgba(239,68,68,0.3); }
+        .delete-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .save-btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 10px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: white;
+        }
+        .save-btn:hover { box-shadow: 0 4px 20px rgba(37,99,235,0.3); }
+
+        /* 슬라이드 요약 */
+        .summary-box {
+            padding: 14px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            padding: 6px 0;
+        }
+
+        .summary-row .label { color: #9ca3af; }
+        .summary-row .value { color: #e0e0e0; font-weight: 600; }
+        .summary-row .value.deleted { color: #f87171; }
+        .summary-row .value.remaining { color: #34d399; }
+
+        /* ── 슬라이드 그리드 ── */
+        .slides-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .view-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .view-controls label {
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .view-size {
+            accent-color: #fbbf24;
+            width: 120px;
+        }
+
+        .slides-grid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: repeat(auto-fill, minmax(var(--thumb-size, 220px), 1fr));
+        }
+
+        .slide-card {
+            background: rgba(255,255,255,0.03);
+            border: 2px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .slide-card:hover {
+            border-color: rgba(255,255,255,0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+
+        .slide-card.selected {
+            border-color: #ef4444;
+            box-shadow: 0 0 20px rgba(239,68,68,0.2);
+        }
+
+        .slide-card.deleted {
+            opacity: 0.35;
+            border-color: rgba(239,68,68,0.3);
+        }
+
+        .slide-card-canvas {
+            width: 100%;
+            aspect-ratio: 16/9;
+            display: block;
+            background: #1a1a2e;
+        }
+
+        .slide-card-footer {
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .slide-card-num {
+            font-size: 13px;
+            color: #9ca3af;
+        }
+
+        .slide-card-checkbox {
+            width: 22px;
+            height: 22px;
+            border: 2px solid rgba(255,255,255,0.15);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-size: 14px;
+            color: transparent;
+        }
+
+        .slide-card.selected .slide-card-checkbox {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: white;
+        }
+
+        .slide-card.deleted .slide-card-badge {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(239,68,68,0.85);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        /* 미리보기 확대 */
+        .preview-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .preview-overlay.active { display: flex; }
+
+        .preview-overlay canvas {
+            max-width: 85vw;
+            max-height: 85vh;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+            border-radius: 8px;
+        }
+
+        .preview-close {
+            position: absolute;
+            top: 20px;
+            right: 24px;
+            font-size: 28px;
+            color: white;
+            cursor: pointer;
+            background: rgba(255,255,255,0.1);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+        }
+
+        /* 확인 모달 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 300;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+
+        .modal {
+            background: #1a1a2e;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 28px;
+            width: 420px;
+            max-width: 90vw;
+        }
+
+        .modal h3 { font-size: 18px; margin-bottom: 12px; color: #f0f0f0; }
+        .modal p { font-size: 14px; color: #9ca3af; line-height: 1.6; margin-bottom: 8px; }
+        .modal .warn { color: #fbbf24; font-size: 13px; }
+
+        .modal-thumbs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 16px 0;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .modal-thumb {
+            width: 60px;
+            aspect-ratio: 16/9;
+            border-radius: 4px;
+            border: 1px solid rgba(239,68,68,0.3);
+            overflow: hidden;
+        }
+
+        .modal-thumb canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .modal-actions .btn { flex: 1; justify-content: center; }
+
+        /* ── 토스트 ── */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 18px;
+            background: rgba(30,30,50,0.95);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            font-size: 13px;
+            color: #e0e0e0;
+            z-index: 500;
+            transform: translateX(120%);
+            transition: transform 0.3s;
+            backdrop-filter: blur(8px);
+        }
+        .toast.show { transform: translateX(0); }
+        .toast.error { border-color: rgba(239,68,68,0.3); }
+        .toast.success { border-color: rgba(16,185,129,0.3); }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <a class="btn-back" href="index.html">&#8592; 메뉴</a>
+        <div class="toolbar-title"><span>슬라이드 삭제</span> &mdash; <span id="currentFileName">-</span></div>
+        <div class="toolbar-actions">
+            <span class="selection-count" id="selectionCount"><strong>0</strong>개 선택</span>
+            <button class="btn" id="btnSelectAll">전체 선택</button>
+            <button class="btn" id="btnDeselectAll">선택 해제</button>
+            <button class="btn btn-danger" id="btnDeleteSelected" disabled>&#10005; 선택 삭제</button>
+            <button class="btn btn-primary" id="btnSave">&#8615; 저장</button>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <!-- 좌측 패널 -->
+        <div class="action-panel">
+            <div class="info-box">
+                <p><strong>슬라이드 삭제</strong><br>
+                미리보기에서 삭제할 슬라이드를 클릭하여 선택하세요. 여러 장을 한 번에 선택할 수 있습니다.</p>
+            </div>
+
+            <div class="panel-section">
+                <div class="panel-section-title">빠른 선택</div>
+
+                <button class="action-btn" id="btnSelectOdd">
+                    <div class="action-btn-icon" style="background:rgba(139,92,246,0.15); color:#a78bfa;">&#9638;</div>
+                    <div class="action-btn-text">
+                        <strong>홀수 슬라이드 선택</strong>
+                        <span>1, 3, 5, 7...</span>
+                    </div>
+                </button>
+
+                <button class="action-btn" id="btnSelectEven">
+                    <div class="action-btn-icon" style="background:rgba(236,72,153,0.15); color:#f472b6;">&#9638;</div>
+                    <div class="action-btn-text">
+                        <strong>짝수 슬라이드 선택</strong>
+                        <span>2, 4, 6, 8...</span>
+                    </div>
+                </button>
+
+                <button class="action-btn" id="btnSelectRange">
+                    <div class="action-btn-icon" style="background:rgba(59,130,246,0.15); color:#60a5fa;">&#8644;</div>
+                    <div class="action-btn-text">
+                        <strong>범위 선택</strong>
+                        <span>시작~끝 번호로 선택</span>
+                    </div>
+                </button>
+
+                <button class="action-btn" id="btnInvertSelection">
+                    <div class="action-btn-icon" style="background:rgba(245,158,11,0.15); color:#fbbf24;">&#8645;</div>
+                    <div class="action-btn-text">
+                        <strong>선택 반전</strong>
+                        <span>선택/비선택 뒤바꾸기</span>
+                    </div>
+                </button>
+            </div>
+
+            <div class="panel-section">
+                <div class="panel-section-title">보기</div>
+                <div class="view-controls">
+                    <label>썸네일 크기</label>
+                    <input type="range" class="view-size" id="viewSize" min="150" max="350" value="220">
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="panel-section-title">요약</div>
+                <div class="summary-box">
+                    <div class="summary-row">
+                        <span class="label">전체 슬라이드</span>
+                        <span class="value" id="totalSlides">0</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="label">삭제 예정</span>
+                        <span class="value deleted" id="deletedSlides">0</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="label">남는 슬라이드</span>
+                        <span class="value remaining" id="remainingSlides">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <button class="delete-btn" id="btnDeleteConfirm" disabled>
+                    &#10005; 선택한 슬라이드 삭제
+                </button>
+                <button class="save-btn" id="btnSavePanel">
+                    &#8615; 남은 슬라이드 저장
+                </button>
+            </div>
+
+            <div class="panel-section" id="undoSection" style="display:none">
+                <button class="action-btn" id="btnUndoDelete">
+                    <div class="action-btn-icon" style="background:rgba(16,185,129,0.15); color:#34d399;">&#8630;</div>
+                    <div class="action-btn-text">
+                        <strong>삭제 취소</strong>
+                        <span>모든 삭제를 되돌립니다</span>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- 슬라이드 그리드 -->
+        <div class="slides-area">
+            <div class="slides-grid" id="slidesGrid" style="--thumb-size: 220px;"></div>
+        </div>
+    </div>
+
+    <!-- 미리보기 오버레이 -->
+    <div class="preview-overlay" id="previewOverlay">
+        <canvas id="previewCanvas"></canvas>
+        <button class="preview-close" id="previewClose">&#10005;</button>
+    </div>
+
+    <!-- 삭제 확인 모달 -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal">
+            <h3>슬라이드 삭제 확인</h3>
+            <p>선택한 <strong id="deleteCountText">0</strong>개의 슬라이드를 삭제하시겠습니까?</p>
+            <div class="modal-thumbs" id="modalThumbs"></div>
+            <p class="warn">삭제된 슬라이드는 저장 시 제외됩니다.</p>
+            <div class="modal-actions">
+                <button class="btn" id="btnModalCancel">취소</button>
+                <button class="btn btn-danger" id="btnModalConfirm">삭제</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 범위 선택 모달 -->
+    <div class="modal-overlay" id="rangeModal">
+        <div class="modal">
+            <h3>범위 선택</h3>
+            <p>삭제할 슬라이드 범위를 입력하세요.</p>
+            <div style="display:flex; gap:12px; align-items:center; margin:16px 0;">
+                <input type="number" id="rangeStart" class="prop-input" placeholder="시작" min="1" style="width:80px; padding:10px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#e0e0e0; font-size:14px;">
+                <span style="color:#6b7280;">~</span>
+                <input type="number" id="rangeEnd" class="prop-input" placeholder="끝" min="1" style="width:80px; padding:10px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#e0e0e0; font-size:14px;">
+            </div>
+            <div class="modal-actions">
+                <button class="btn" id="btnRangeCancel">취소</button>
+                <button class="btn btn-warning" id="btnRangeConfirm">선택</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // ── 상태 ──
+        const state = {
+            pdfDoc: null,
+            totalPages: 0,
+            selectedPages: new Set(),
+            deletedPages: new Set(),
+            pageCanvases: {}  // pageNum -> canvas element
+        };
+
+        // ── 초기화 ──
+        async function init() {
+            const pdfData = sessionStorage.getItem('pdfData');
+            const pdfName = sessionStorage.getItem('pdfFileName');
+            if (!pdfData) {
+                showToast('PDF 파일이 없습니다. 메인으로 돌아가세요.', 'error');
+                return;
+            }
+            document.getElementById('currentFileName').textContent = pdfName || '-';
+
+            const raw = atob(pdfData);
+            const uint8 = new Uint8Array(raw.length);
+            for (let i = 0; i < raw.length; i++) uint8[i] = raw.charCodeAt(i);
+
+            state.pdfDoc = await pdfjsLib.getDocument({ data: uint8 }).promise;
+            state.totalPages = state.pdfDoc.numPages;
+
+            document.getElementById('totalSlides').textContent = state.totalPages;
+            document.getElementById('remainingSlides').textContent = state.totalPages;
+            document.getElementById('rangeEnd').max = state.totalPages;
+            document.getElementById('rangeStart').max = state.totalPages;
+
+            await buildGrid();
+        }
+
+        // ── 그리드 생성 ──
+        async function buildGrid() {
+            const grid = document.getElementById('slidesGrid');
+            grid.innerHTML = '';
+
+            for (let i = 1; i <= state.totalPages; i++) {
+                const card = document.createElement('div');
+                card.className = 'slide-card';
+                card.dataset.page = i;
+
+                const c = document.createElement('canvas');
+                c.className = 'slide-card-canvas';
+
+                const footer = document.createElement('div');
+                footer.className = 'slide-card-footer';
+
+                const num = document.createElement('span');
+                num.className = 'slide-card-num';
+                num.textContent = `슬라이드 ${i}`;
+
+                const checkbox = document.createElement('div');
+                checkbox.className = 'slide-card-checkbox';
+                checkbox.innerHTML = '&#10003;';
+
+                footer.appendChild(num);
+                footer.appendChild(checkbox);
+
+                card.appendChild(c);
+                card.appendChild(footer);
+
+                // 클릭: 선택 토글
+                card.addEventListener('click', (e) => {
+                    if (state.deletedPages.has(i)) return;
+                    toggleSelect(i, card);
+                });
+
+                // 더블클릭: 미리보기
+                card.addEventListener('dblclick', (e) => {
+                    e.preventDefault();
+                    showPreview(i);
+                });
+
+                grid.appendChild(card);
+                state.pageCanvases[i] = c;
+
+                // 비동기 렌더
+                renderThumb(i, c);
+            }
+        }
+
+        async function renderThumb(pageNum, thumbCanvas) {
+            const page = await state.pdfDoc.getPage(pageNum);
+            const vp = page.getViewport({ scale: 0.5 });
+            thumbCanvas.width = vp.width;
+            thumbCanvas.height = vp.height;
+            await page.render({ canvasContext: thumbCanvas.getContext('2d'), viewport: vp }).promise;
+        }
+
+        // ── 선택 토글 ──
+        function toggleSelect(pageNum, card) {
+            if (state.selectedPages.has(pageNum)) {
+                state.selectedPages.delete(pageNum);
+                card.classList.remove('selected');
+            } else {
+                state.selectedPages.add(pageNum);
+                card.classList.add('selected');
+            }
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const selected = state.selectedPages.size;
+            const deleted = state.deletedPages.size;
+            const remaining = state.totalPages - deleted;
+
+            document.getElementById('selectionCount').innerHTML = `<strong>${selected}</strong>개 선택`;
+            document.getElementById('deletedSlides').textContent = deleted;
+            document.getElementById('remainingSlides').textContent = remaining;
+
+            const canDelete = selected > 0;
+            document.getElementById('btnDeleteSelected').disabled = !canDelete;
+            document.getElementById('btnDeleteConfirm').disabled = !canDelete;
+
+            document.getElementById('undoSection').style.display = deleted > 0 ? 'block' : 'none';
+        }
+
+        // ── 선택 기능들 ──
+        document.getElementById('btnSelectAll').addEventListener('click', () => {
+            document.querySelectorAll('.slide-card').forEach(card => {
+                const p = parseInt(card.dataset.page);
+                if (!state.deletedPages.has(p)) {
+                    state.selectedPages.add(p);
+                    card.classList.add('selected');
+                }
+            });
+            updateSummary();
+        });
+
+        document.getElementById('btnDeselectAll').addEventListener('click', () => {
+            state.selectedPages.clear();
+            document.querySelectorAll('.slide-card').forEach(c => c.classList.remove('selected'));
+            updateSummary();
+        });
+
+        document.getElementById('btnSelectOdd').addEventListener('click', () => {
+            state.selectedPages.clear();
+            document.querySelectorAll('.slide-card').forEach(card => {
+                const p = parseInt(card.dataset.page);
+                card.classList.remove('selected');
+                if (p % 2 === 1 && !state.deletedPages.has(p)) {
+                    state.selectedPages.add(p);
+                    card.classList.add('selected');
+                }
+            });
+            updateSummary();
+            showToast('홀수 슬라이드가 선택되었습니다.');
+        });
+
+        document.getElementById('btnSelectEven').addEventListener('click', () => {
+            state.selectedPages.clear();
+            document.querySelectorAll('.slide-card').forEach(card => {
+                const p = parseInt(card.dataset.page);
+                card.classList.remove('selected');
+                if (p % 2 === 0 && !state.deletedPages.has(p)) {
+                    state.selectedPages.add(p);
+                    card.classList.add('selected');
+                }
+            });
+            updateSummary();
+            showToast('짝수 슬라이드가 선택되었습니다.');
+        });
+
+        document.getElementById('btnInvertSelection').addEventListener('click', () => {
+            document.querySelectorAll('.slide-card').forEach(card => {
+                const p = parseInt(card.dataset.page);
+                if (state.deletedPages.has(p)) return;
+                if (state.selectedPages.has(p)) {
+                    state.selectedPages.delete(p);
+                    card.classList.remove('selected');
+                } else {
+                    state.selectedPages.add(p);
+                    card.classList.add('selected');
+                }
+            });
+            updateSummary();
+            showToast('선택이 반전되었습니다.');
+        });
+
+        // 범위 선택
+        document.getElementById('btnSelectRange').addEventListener('click', () => {
+            document.getElementById('rangeModal').classList.add('active');
+        });
+        document.getElementById('btnRangeCancel').addEventListener('click', () => {
+            document.getElementById('rangeModal').classList.remove('active');
+        });
+        document.getElementById('btnRangeConfirm').addEventListener('click', () => {
+            const start = parseInt(document.getElementById('rangeStart').value);
+            const end = parseInt(document.getElementById('rangeEnd').value);
+            if (!start || !end || start > end || start < 1 || end > state.totalPages) {
+                showToast('올바른 범위를 입력하세요.', 'error');
+                return;
+            }
+            document.getElementById('rangeModal').classList.remove('active');
+
+            state.selectedPages.clear();
+            document.querySelectorAll('.slide-card').forEach(card => {
+                const p = parseInt(card.dataset.page);
+                card.classList.remove('selected');
+                if (p >= start && p <= end && !state.deletedPages.has(p)) {
+                    state.selectedPages.add(p);
+                    card.classList.add('selected');
+                }
+            });
+            updateSummary();
+            showToast(`슬라이드 ${start}~${end}이 선택되었습니다.`);
+        });
+
+        // ── 삭제 ──
+        document.getElementById('btnDeleteSelected').addEventListener('click', showDeleteConfirm);
+        document.getElementById('btnDeleteConfirm').addEventListener('click', showDeleteConfirm);
+
+        function showDeleteConfirm() {
+            if (state.selectedPages.size === 0) return;
+
+            // 전체 삭제 방지
+            const remainAfter = state.totalPages - state.deletedPages.size - state.selectedPages.size;
+            if (remainAfter <= 0) {
+                showToast('최소 1개의 슬라이드는 남겨야 합니다.', 'error');
+                return;
+            }
+
+            document.getElementById('deleteCountText').textContent = state.selectedPages.size;
+
+            // 썸네일 표시
+            const thumbs = document.getElementById('modalThumbs');
+            thumbs.innerHTML = '';
+            const sorted = [...state.selectedPages].sort((a, b) => a - b);
+            sorted.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'modal-thumb';
+                const c = document.createElement('canvas');
+                div.appendChild(c);
+                thumbs.appendChild(div);
+
+                const origCanvas = state.pageCanvases[p];
+                if (origCanvas) {
+                    c.width = origCanvas.width;
+                    c.height = origCanvas.height;
+                    c.getContext('2d').drawImage(origCanvas, 0, 0);
+                }
+            });
+
+            document.getElementById('deleteModal').classList.add('active');
+        }
+
+        document.getElementById('btnModalCancel').addEventListener('click', () => {
+            document.getElementById('deleteModal').classList.remove('active');
+        });
+
+        document.getElementById('btnModalConfirm').addEventListener('click', () => {
+            document.getElementById('deleteModal').classList.remove('active');
+            executeDelete();
+        });
+
+        function executeDelete() {
+            state.selectedPages.forEach(p => {
+                state.deletedPages.add(p);
+                const card = document.querySelector(`.slide-card[data-page="${p}"]`);
+                if (card) {
+                    card.classList.remove('selected');
+                    card.classList.add('deleted');
+
+                    // 삭제 배지 추가
+                    const badge = document.createElement('div');
+                    badge.className = 'slide-card-badge';
+                    badge.textContent = '삭제됨';
+                    card.appendChild(badge);
+                }
+            });
+
+            const count = state.selectedPages.size;
+            state.selectedPages.clear();
+            updateSummary();
+            showToast(`${count}개 슬라이드가 삭제되었습니다.`, 'success');
+        }
+
+        // ── 삭제 취소 ──
+        document.getElementById('btnUndoDelete').addEventListener('click', () => {
+            state.deletedPages.clear();
+            document.querySelectorAll('.slide-card').forEach(card => {
+                card.classList.remove('deleted');
+                card.querySelectorAll('.slide-card-badge').forEach(b => b.remove());
+            });
+            updateSummary();
+            showToast('모든 삭제가 취소되었습니다.', 'success');
+        });
+
+        // ── 미리보기 ──
+        function showPreview(pageNum) {
+            const overlay = document.getElementById('previewOverlay');
+            const previewCanvas = document.getElementById('previewCanvas');
+            overlay.classList.add('active');
+
+            state.pdfDoc.getPage(pageNum).then(page => {
+                const vp = page.getViewport({ scale: 2 });
+                previewCanvas.width = vp.width;
+                previewCanvas.height = vp.height;
+                page.render({ canvasContext: previewCanvas.getContext('2d'), viewport: vp });
+            });
+        }
+
+        document.getElementById('previewOverlay').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('previewOverlay') || e.target === document.getElementById('previewClose')) {
+                document.getElementById('previewOverlay').classList.remove('active');
+            }
+        });
+        document.getElementById('previewClose').addEventListener('click', () => {
+            document.getElementById('previewOverlay').classList.remove('active');
+        });
+
+        // ── 보기 크기 ──
+        document.getElementById('viewSize').addEventListener('input', (e) => {
+            document.getElementById('slidesGrid').style.setProperty('--thumb-size', e.target.value + 'px');
+        });
+
+        // ── 저장 ──
+        async function saveSlides() {
+            const remaining = [];
+            for (let i = 1; i <= state.totalPages; i++) {
+                if (!state.deletedPages.has(i)) remaining.push(i);
+            }
+
+            if (remaining.length === 0) {
+                showToast('저장할 슬라이드가 없습니다.', 'error');
+                return;
+            }
+
+            for (const pageNum of remaining) {
+                const page = await state.pdfDoc.getPage(pageNum);
+                const vp = page.getViewport({ scale: 2 });
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = vp.width;
+                tempCanvas.height = vp.height;
+                await page.render({ canvasContext: tempCanvas.getContext('2d'), viewport: vp }).promise;
+
+                const link = document.createElement('a');
+                link.download = `slide_${pageNum}.png`;
+                link.href = tempCanvas.toDataURL('image/png');
+                link.click();
+                await new Promise(r => setTimeout(r, 300));
+            }
+
+            showToast(`${remaining.length}개 슬라이드가 저장되었습니다.`, 'success');
+        }
+
+        document.getElementById('btnSave').addEventListener('click', saveSlides);
+        document.getElementById('btnSavePanel').addEventListener('click', saveSlides);
+
+        // ── 유틸 ──
+        function showToast(msg, type = '') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toast ' + type;
+            setTimeout(() => t.classList.add('show'), 10);
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        // ── 시작 ──
+        init();
+    </script>
+</body>
+</html>
