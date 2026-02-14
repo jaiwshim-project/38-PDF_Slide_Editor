@@ -451,7 +451,7 @@
         .edit-textarea {
             width: 100%;
             height: 100%;
-            border: 2px solid #8b5cf6;
+            border: 1px dashed rgba(88,110,250,0.35);
             background: transparent;
             color: #000;
             padding: 2px 4px;
@@ -460,6 +460,10 @@
             resize: none;
             outline: none;
             border-radius: 2px;
+            transition: border-color 0.2s;
+        }
+        .edit-textarea:focus {
+            border: 1px solid rgba(88,110,250,0.5);
         }
 
         /* 텍스트 객체 (배치 완료 후) */
@@ -855,8 +859,8 @@
         </a>
 
         <div class="mode-buttons">
-            <button class="mode-btn active" data-mode="pan" id="modePan"><kbd>Space</kbd>+ Drag</button>
-            <button class="mode-btn" data-mode="select" id="modeSelect"><kbd></kbd>Drag Selection</button>
+            <button class="mode-btn" data-mode="pan" id="modePan"><kbd>Space</kbd>+ Drag</button>
+            <button class="mode-btn active" data-mode="select" id="modeSelect"><kbd></kbd>Drag Selection</button>
             <button class="mode-btn" data-mode="zoom" id="modeZoom"><kbd>Ctrl</kbd>+ Wheel Zoom</button>
         </div>
 
@@ -1200,7 +1204,7 @@
         currentPage: 1,
         totalPages: 0,
         scale: 1.5,
-        mode: 'pan',          // pan | select | zoom
+        mode: 'select',       // pan | select | zoom
         deleteMode: false,
         deletedPages: new Set(),
         editLayers: {},        // page -> [{bgColor, text, rect, styles, padding}]
@@ -1681,10 +1685,19 @@
         S.selEnd = { x: e.clientX - r.left, y: e.clientY - r.top };
         const rect = getSelRect();
         if (rect.w > 10 && rect.h > 10) {
+            // 드래그 선택
             detectBg(rect);
             runOCR(rect);
         } else {
+            // 클릭 — 자동 텍스트 영역 감지
             clearSelBox();
+            const cx = Math.round(S.selStart.x);
+            const cy = Math.round(S.selStart.y);
+            const autoRect = autoDetectTextRegion(cx, cy);
+            if (autoRect) {
+                detectBg(autoRect);
+                runOCR(autoRect);
+            }
         }
     });
 
@@ -1706,6 +1719,107 @@
         overlay.classList.remove('pan-mode');
         showToast('슬라이드에서 색상을 클릭하세요');
     });
+
+    // 클릭 지점 주변 텍스트 블록 자동 감지
+    function autoDetectTextRegion(cx, cy) {
+        const w = canvas.width, h = canvas.height;
+        if (cx < 0 || cx >= w || cy < 0 || cy >= h) return null;
+
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const px = imgData.data;
+
+        function getPixel(x, y) {
+            const i = (y * w + x) * 4;
+            return [px[i], px[i+1], px[i+2]];
+        }
+        function colorDist(a, b) {
+            return Math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2);
+        }
+
+        // 클릭 주변 영역에서 배경색 추출
+        const sr = 80;
+        const sx = Math.max(0, cx - sr), sy = Math.max(0, cy - sr);
+        const sw = Math.min(sr*2, w - sx), sh = Math.min(sr*2, h - sy);
+        const sample = ctx.getImageData(sx, sy, sw, sh);
+        const colors = {};
+        for (let i = 0; i < sample.data.length; i += 4) {
+            const k = `${Math.round(sample.data[i]/8)*8},${Math.round(sample.data[i+1]/8)*8},${Math.round(sample.data[i+2]/8)*8}`;
+            colors[k] = (colors[k] || 0) + 1;
+        }
+        let bgKey = '', bgMax = 0;
+        for (const [k, v] of Object.entries(colors)) { if (v > bgMax) { bgMax = v; bgKey = k; } }
+        const bg = bgKey.split(',').map(Number);
+
+        // 클릭 지점이 배경이면 텍스트가 아님
+        const clickPx = getPixel(cx, cy);
+        if (colorDist(clickPx, bg) < 35) {
+            showToast('텍스트를 클릭하세요', '');
+            return null;
+        }
+
+        const thr = 40;
+        const scanH = 20; // 스캔 폭 (수직/수평 방향)
+
+        // 좌측 확장
+        let left = cx, bgRun = 0;
+        for (let x = cx; x >= 0 && bgRun < 25; x--) {
+            let hasText = false;
+            for (let dy = -scanH; dy <= scanH; dy += 2) {
+                const yy = cy + dy;
+                if (yy < 0 || yy >= h) continue;
+                if (colorDist(getPixel(x, yy), bg) > thr) { hasText = true; break; }
+            }
+            if (hasText) { bgRun = 0; left = x; } else bgRun++;
+        }
+
+        // 우측 확장
+        let right = cx; bgRun = 0;
+        for (let x = cx; x < w && bgRun < 25; x++) {
+            let hasText = false;
+            for (let dy = -scanH; dy <= scanH; dy += 2) {
+                const yy = cy + dy;
+                if (yy < 0 || yy >= h) continue;
+                if (colorDist(getPixel(x, yy), bg) > thr) { hasText = true; break; }
+            }
+            if (hasText) { bgRun = 0; right = x; } else bgRun++;
+        }
+
+        // 상단 확장
+        let top = cy; bgRun = 0;
+        for (let y = cy; y >= 0 && bgRun < 20; y--) {
+            let hasText = false;
+            for (let dx = -scanH; dx <= scanH; dx += 2) {
+                const xx = cx + dx;
+                if (xx < 0 || xx >= w) continue;
+                if (colorDist(getPixel(xx, y), bg) > thr) { hasText = true; break; }
+            }
+            if (hasText) { bgRun = 0; top = y; } else bgRun++;
+        }
+
+        // 하단 확장
+        let bottom = cy; bgRun = 0;
+        for (let y = cy; y < h && bgRun < 20; y++) {
+            let hasText = false;
+            for (let dx = -scanH; dx <= scanH; dx += 2) {
+                const xx = cx + dx;
+                if (xx < 0 || xx >= w) continue;
+                if (colorDist(getPixel(xx, y), bg) > thr) { hasText = true; break; }
+            }
+            if (hasText) { bgRun = 0; bottom = y; } else bgRun++;
+        }
+
+        // 여백 추가
+        const pad = 6;
+        left = Math.max(0, left - pad);
+        top = Math.max(0, top - pad);
+        right = Math.min(w - 1, right + pad);
+        bottom = Math.min(h - 1, bottom + pad);
+
+        const rw = right - left, rh = bottom - top;
+        if (rw < 15 || rh < 10) return null;
+
+        return { x: left, y: top, w: rw, h: rh };
+    }
 
     function getSelRect() {
         const x = Math.min(S.selStart.x, S.selEnd.x);
