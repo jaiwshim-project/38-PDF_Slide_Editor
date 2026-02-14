@@ -390,8 +390,6 @@
 
         #mainCanvas {
             display: block;
-            max-width: 100%;
-            max-height: calc(100vh - 140px);
             border-radius: 2px;
         }
 
@@ -462,6 +460,50 @@
             outline: none;
             border-radius: 2px;
         }
+
+        /* 텍스트 객체 (배치 완료 후) */
+        .text-object {
+            position: absolute;
+            cursor: move;
+            z-index: 15;
+            border: 2px solid transparent;
+            white-space: pre-wrap;
+            word-break: break-word;
+            user-select: none;
+            transition: border-color 0.15s;
+            overflow: hidden;
+        }
+        .text-object:hover { border-color: rgba(88,110,250,0.4); }
+        .text-object.selected {
+            border-color: #586efa;
+            box-shadow: 0 0 0 1px #586efa;
+        }
+
+        .text-object-actions {
+            position: absolute;
+            top: -30px;
+            right: 0;
+            display: none;
+            gap: 3px;
+            z-index: 16;
+        }
+        .text-object.selected .text-object-actions { display: flex; }
+
+        .to-btn {
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .to-btn-edit { background: #586efa; color: #fff; }
+        .to-btn-edit:hover { background: #4c5fd7; }
+        .to-btn-del { background: #da3633; color: #fff; }
+        .to-btn-del:hover { background: #f85149; }
 
         /* ── 하단 슬라이드 네비게이션 ── */
         .bottom-bar {
@@ -1167,7 +1209,8 @@
         panStart: null,
         panScroll: null,
         spaceHeld: false,
-        prevMode: null
+        prevMode: null,
+        selectedObject: null
     };
 
     const canvas = document.getElementById('mainCanvas');
@@ -1291,12 +1334,15 @@
     // ═══════════════════════════════
     async function renderPage(p) {
         S.currentPage = p;
+        S.selectedObject = null;
+
+        // 기존 텍스트 객체 DOM 제거
+        container.querySelectorAll('.text-object').forEach(el => el.remove());
+
         const page = await S.pdfDoc.getPage(p);
         const vp = page.getViewport({ scale: S.scale });
         canvas.width = vp.width;
         canvas.height = vp.height;
-        overlay.style.width = vp.width + 'px';
-        overlay.style.height = vp.height + 'px';
 
         await page.render({ canvasContext: ctx, viewport: vp }).promise;
 
@@ -1304,7 +1350,7 @@
             S.originals[p] = ctx.getImageData(0, 0, canvas.width, canvas.height);
         }
 
-        // 편집 레이어 복원
+        // 편집 레이어 DOM 복원
         reapplyEdits(p);
 
         // UI 동기화
@@ -1315,6 +1361,158 @@
     }
 
     function reapplyEdits(p) {
+        (S.editLayers[p] || []).forEach(l => {
+            createTextObject(l);
+        });
+    }
+
+    // 텍스트 객체를 DOM 요소로 생성
+    function createTextObject(data) {
+        const div = document.createElement('div');
+        div.className = 'text-object';
+        div.style.left = (data.rect.x - data.padding) + 'px';
+        div.style.top = (data.rect.y - data.padding) + 'px';
+        div.style.width = (data.rect.w + data.padding * 2) + 'px';
+        div.style.minHeight = (data.rect.h + data.padding * 2) + 'px';
+        div.style.backgroundColor = data.bgColor;
+        div.style.padding = data.padding + 'px';
+        div.style.fontFamily = data.styles.font;
+        div.style.fontSize = data.styles.fontSize + 'px';
+        div.style.fontWeight = data.styles.fontWeight;
+        div.style.color = data.styles.color;
+        div.style.letterSpacing = data.styles.letterSpacing + 'px';
+        div.style.transform = `scaleX(${data.styles.scaleX})`;
+        div.style.transformOrigin = 'left top';
+        div.style.lineHeight = data.styles.lineHeight;
+        div.textContent = data.text;
+
+        // 액션 버튼
+        const actions = document.createElement('div');
+        actions.className = 'text-object-actions';
+
+        const btnEdit = document.createElement('button');
+        btnEdit.className = 'to-btn to-btn-edit';
+        btnEdit.innerHTML = '&#9998;';
+        btnEdit.title = '편집';
+
+        const btnDel = document.createElement('button');
+        btnDel.className = 'to-btn to-btn-del';
+        btnDel.innerHTML = '&#10005;';
+        btnDel.title = '삭제';
+
+        actions.appendChild(btnEdit);
+        actions.appendChild(btnDel);
+        div.appendChild(actions);
+
+        // 데이터 참조 저장
+        div._editData = data;
+
+        // 클릭 → 선택
+        div.addEventListener('mousedown', (e) => {
+            if (S.mode !== 'select') return;
+            e.stopPropagation();
+            selectTextObject(div);
+            // 드래그 이동 시작
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const origLeft = parseInt(div.style.left);
+            const origTop = parseInt(div.style.top);
+
+            function onMove(ev) {
+                const dx = ev.clientX - startX;
+                const dy = ev.clientY - startY;
+                div.style.left = (origLeft + dx) + 'px';
+                div.style.top = (origTop + dy) + 'px';
+            }
+            function onUp() {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                // 데이터 업데이트
+                data.rect.x = parseInt(div.style.left) + data.padding;
+                data.rect.y = parseInt(div.style.top) + data.padding;
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+
+        // 더블클릭 → 재편집
+        div.addEventListener('dblclick', (e) => {
+            if (S.mode !== 'select') return;
+            e.stopPropagation();
+            reopenEdit(div, data);
+        });
+
+        // 삭제 버튼
+        btnDel.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeTextObject(div);
+        });
+
+        // 편집 버튼
+        btnEdit.addEventListener('click', (e) => {
+            e.stopPropagation();
+            reopenEdit(div, data);
+        });
+
+        container.appendChild(div);
+        return div;
+    }
+
+    function selectTextObject(div) {
+        // 이전 선택 해제
+        container.querySelectorAll('.text-object.selected').forEach(el => el.classList.remove('selected'));
+        div.classList.add('selected');
+        S.selectedObject = div;
+    }
+
+    function removeTextObject(div) {
+        const data = div._editData;
+        const layers = S.editLayers[S.currentPage];
+        if (layers) {
+            const idx = layers.indexOf(data);
+            if (idx !== -1) layers.splice(idx, 1);
+        }
+        div.remove();
+        S.selectedObject = null;
+        updateThumbFromSource(S.currentPage);
+        addProcessed(`슬라이드 ${S.currentPage} 텍스트 삭제`);
+        showToast('텍스트 객체 삭제됨', 'success');
+    }
+
+    function reopenEdit(div, data) {
+        // 기존 텍스트 객체를 편집 레이어로 변환
+        div.remove();
+        const layers = S.editLayers[S.currentPage];
+        if (layers) {
+            const idx = layers.indexOf(data);
+            if (idx !== -1) layers.splice(idx, 1);
+        }
+        S.selectedObject = null;
+
+        // 우측 패널 속성 복원
+        document.getElementById('propFont').value = data.styles.font;
+        document.getElementById('propSize').value = data.styles.fontSize;
+        document.getElementById('propWeight').value = data.styles.fontWeight;
+        document.getElementById('propColor').value = data.styles.color;
+        document.getElementById('propLetterSp').value = data.styles.letterSpacing;
+        document.getElementById('propScaleX').value = Math.round(data.styles.scaleX * 100);
+        document.getElementById('propLineH').value = Math.round(data.styles.lineHeight * 100);
+        document.getElementById('propBgColor').value = data.bgColor;
+        document.getElementById('propPad').value = data.padding;
+
+        createEditLayer(data.rect, data.text);
+    }
+
+    // 캔버스 밖 클릭 시 선택 해제
+    overlay.addEventListener('mousedown', (e) => {
+        if (S.selectedObject && S.mode === 'select') {
+            S.selectedObject.classList.remove('selected');
+            S.selectedObject = null;
+        }
+    }, true);
+
+    // 텍스트 객체를 캔버스에 그리기 (내보내기용)
+    function renderEditsToCanvas(p) {
         (S.editLayers[p] || []).forEach(l => {
             ctx.fillStyle = l.bgColor;
             ctx.fillRect(l.rect.x - l.padding, l.rect.y - l.padding, l.rect.w + l.padding * 2, l.rect.h + l.padding * 2);
@@ -1624,36 +1822,17 @@
             lineHeight: document.getElementById('propLineH').value / 100
         };
 
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(rect.x - pad, rect.y - pad, rect.w + pad * 2, rect.h + pad * 2);
-
-        ctx.save();
-        ctx.fillStyle = styles.color;
-        ctx.font = `${styles.fontWeight} ${styles.fontSize}px ${styles.font}`;
-        ctx.textBaseline = 'top';
-        const lineH = styles.fontSize * styles.lineHeight;
-        let ty = rect.y + 2;
-        text.split('\n').forEach(line => {
-            if (styles.letterSpacing !== 0 || styles.scaleX !== 1) {
-                ctx.save();
-                ctx.translate(rect.x + 2, ty);
-                ctx.scale(styles.scaleX, 1);
-                let tx = 0;
-                for (const ch of line) { ctx.fillText(ch, tx, 0); tx += ctx.measureText(ch).width + styles.letterSpacing; }
-                ctx.restore();
-            } else {
-                ctx.fillText(line, rect.x + 2, ty);
-            }
-            ty += lineH;
-        });
-        ctx.restore();
-
         layer.remove();
+
+        const data = { bgColor, text, rect: {...rect}, styles, padding: pad };
         if (!S.editLayers[S.currentPage]) S.editLayers[S.currentPage] = [];
-        S.editLayers[S.currentPage].push({ bgColor, text, rect, styles, padding: pad });
+        S.editLayers[S.currentPage].push(data);
+
+        // DOM 텍스트 객체 생성 (캔버스 위에 떠 있는 요소)
+        createTextObject(data);
 
         addProcessed(`슬라이드 ${S.currentPage} 텍스트 수정`);
-        updateThumb(S.currentPage);
+        updateThumbFromSource(S.currentPage);
         showToast('텍스트 적용 완료', 'success');
     }
 
@@ -1664,6 +1843,16 @@
             tc.clearRect(0, 0, th.width, th.height);
             tc.drawImage(canvas, 0, 0, th.width, th.height);
         }
+    }
+
+    // 원본 + 편집내용을 캔버스에 렌더링 후 썸네일 업데이트
+    async function updateThumbFromSource(p) {
+        // 원본 복원 후 편집 내용을 캔버스에 그려서 썸네일 생성
+        if (S.originals[p]) ctx.putImageData(S.originals[p], 0, 0);
+        renderEditsToCanvas(p);
+        updateThumb(p);
+        // 다시 원본으로 복원 (DOM 텍스트 객체가 표시 담당)
+        if (S.originals[p]) ctx.putImageData(S.originals[p], 0, 0);
     }
 
     // ═══════════════════════════════
@@ -1801,25 +1990,38 @@
 
     document.getElementById('exportCurrent').addEventListener('click', () => {
         document.getElementById('exportModal').classList.remove('active');
+        // 원본 + 편집내용 캔버스에 렌더링
+        if (S.originals[S.currentPage]) ctx.putImageData(S.originals[S.currentPage], 0, 0);
+        renderEditsToCanvas(S.currentPage);
         const link = document.createElement('a');
         link.download = `slide_${S.currentPage}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
+        // 원본 복원
+        if (S.originals[S.currentPage]) ctx.putImageData(S.originals[S.currentPage], 0, 0);
         showToast('현재 슬라이드 저장 완료', 'success');
     });
 
     document.getElementById('exportAll').addEventListener('click', async () => {
         document.getElementById('exportModal').classList.remove('active');
+        const savedPage = S.currentPage;
         for (let i = 1; i <= S.totalPages; i++) {
             if (S.deletedPages.has(i)) continue;
-            await renderPage(i);
+            // 원본 렌더링
+            const page = await S.pdfDoc.getPage(i);
+            const vp = page.getViewport({ scale: S.scale });
+            canvas.width = vp.width;
+            canvas.height = vp.height;
+            await page.render({ canvasContext: ctx, viewport: vp }).promise;
+            // 편집내용 캔버스에 그리기
+            renderEditsToCanvas(i);
             const link = document.createElement('a');
             link.download = `slide_${i}.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
             await new Promise(r => setTimeout(r, 300));
         }
-        await renderPage(S.currentPage);
+        await renderPage(savedPage);
         showToast('전체 슬라이드 저장 완료!', 'success');
     });
 
@@ -1844,14 +2046,15 @@
         if (e.key === 'ArrowLeft' && S.currentPage > 1) renderPage(S.currentPage - 1);
         if (e.key === 'ArrowRight' && S.currentPage < S.totalPages) renderPage(S.currentPage + 1);
 
-        // Ctrl+Z: 실행취소
+        // Delete: 선택된 텍스트 객체 삭제
+        if ((e.key === 'Delete' || e.key === 'Backspace') && S.selectedObject) {
+            e.preventDefault();
+            removeTextObject(S.selectedObject);
+        }
+
+        // Ctrl+Z: 실행취소 (마지막 텍스트 객체 제거)
         if (e.ctrlKey && e.key === 'z') {
-            const layers = S.editLayers[S.currentPage];
-            if (layers && layers.length > 0) {
-                layers.pop();
-                renderPage(S.currentPage);
-                showToast('실행 취소', 'success');
-            }
+            undoLastEdit();
         }
     });
 
@@ -1906,14 +2109,21 @@
         document.getElementById('btnEyedrop').click();
     });
 
-    // 도구 모음 실행취소
-    document.getElementById('tbUndo').addEventListener('click', () => {
+    function undoLastEdit() {
         const layers = S.editLayers[S.currentPage];
         if (layers && layers.length > 0) {
             layers.pop();
-            renderPage(S.currentPage);
+            // 마지막 텍스트 객체 DOM 제거
+            const objs = container.querySelectorAll('.text-object');
+            if (objs.length > 0) objs[objs.length - 1].remove();
+            S.selectedObject = null;
             showToast('실행 취소', 'success');
         }
+    }
+
+    // 도구 모음 실행취소
+    document.getElementById('tbUndo').addEventListener('click', () => {
+        undoLastEdit();
     });
 
     // 줌 컨트롤
