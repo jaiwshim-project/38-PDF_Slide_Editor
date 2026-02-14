@@ -1089,9 +1089,39 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     // ═══════════════════════════════
-    //  PDF 데이터 로드 (localStorage 청크)
+    //  PDF 데이터 로드 (IndexedDB 우선 + localStorage 폴백)
     // ═══════════════════════════════
-    function loadPdfFromStorage() {
+    const DB_NAME = 'PdfSlideEditorDB';
+    const DB_VERSION = 1;
+    const STORE_NAME = 'pdfFiles';
+
+    function openDB() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, DB_VERSION);
+            req.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    db.createObjectStore(STORE_NAME);
+                }
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function loadPdfFromIndexedDB() {
+        try {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const req = tx.objectStore(STORE_NAME).get('pdf_data');
+                req.onsuccess = () => { db.close(); resolve(req.result || null); };
+                req.onerror = () => { db.close(); resolve(null); };
+            });
+        } catch(e) { return null; }
+    }
+
+    function loadPdfFromLocalStorage() {
         const chunkCount = parseInt(localStorage.getItem('pdf_chunks') || '0');
         if (chunkCount === 0) return null;
         let base64 = '';
@@ -1100,11 +1130,18 @@
             if (!chunk) return null;
             base64 += chunk;
         }
-        // base64 → ArrayBuffer
         const binary = atob(base64);
         const buf = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
         return buf.buffer;
+    }
+
+    async function loadPdfFromStorage() {
+        // IndexedDB 우선 시도
+        const idbData = await loadPdfFromIndexedDB();
+        if (idbData) return idbData;
+        // localStorage 폴백
+        return loadPdfFromLocalStorage();
     }
 
     // ═══════════════════════════════
@@ -1142,8 +1179,8 @@
     //  INIT
     // ═══════════════════════════════
     async function init() {
-        // localStorage 청크에서 PDF 데이터 로드
-        const arrayBuffer = loadPdfFromStorage();
+        // IndexedDB 우선 + localStorage 폴백에서 PDF 데이터 로드
+        const arrayBuffer = await loadPdfFromStorage();
         const pdfName = localStorage.getItem('pdf_fileName') || '';
 
         if (!arrayBuffer) {
