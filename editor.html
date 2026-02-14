@@ -932,7 +932,13 @@
         selStart: null,
         selEnd: null,
         eyedropActive: false,
-        logoVisible: false
+        logoVisible: false,
+        // pan state
+        isPanning: false,
+        panStart: null,
+        panScroll: null,
+        spaceHeld: false,
+        prevMode: null
     };
 
     const canvas = document.getElementById('mainCanvas');
@@ -1100,18 +1106,12 @@
     //  MODES
     // ═══════════════════════════════
     document.querySelectorAll('.mode-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            S.mode = btn.dataset.mode;
-            overlay.className = 'selection-overlay';
-            if (S.mode === 'pan') overlay.classList.add('pan-mode');
-            if (S.deleteMode) overlay.classList.add('delete-mode');
-        });
+        btn.addEventListener('click', () => switchMode(btn.dataset.mode));
     });
 
     // 줌 (Ctrl + Wheel)
-    document.getElementById('canvasViewport').addEventListener('wheel', (e) => {
+    const viewport = document.getElementById('canvasViewport');
+    viewport.addEventListener('wheel', (e) => {
         if (e.ctrlKey) {
             e.preventDefault();
             const delta = e.deltaY > 0 ? -0.1 : 0.1;
@@ -1119,6 +1119,68 @@
             renderPage(S.currentPage);
         }
     }, { passive: false });
+
+    // ═══════════════════════════════
+    //  PAN (Space + Drag)
+    // ═══════════════════════════════
+    function switchMode(mode) {
+        S.mode = mode;
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+        overlay.className = 'selection-overlay';
+        if (mode === 'pan') overlay.classList.add('pan-mode');
+        if (S.deleteMode) overlay.classList.add('delete-mode');
+    }
+
+    // Space 키 누르면 임시 팬 모드
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && !S.spaceHeld && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
+            e.preventDefault();
+            S.spaceHeld = true;
+            S.prevMode = S.mode;
+            switchMode('pan');
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        if (e.code === 'Space' && S.spaceHeld) {
+            e.preventDefault();
+            S.spaceHeld = false;
+            if (S.prevMode) {
+                switchMode(S.prevMode);
+                S.prevMode = null;
+            }
+        }
+    });
+
+    // 팬 드래그 동작
+    overlay.addEventListener('mousedown', (e) => {
+        if (S.mode === 'pan' && !S.eyedropActive) {
+            S.isPanning = true;
+            S.panStart = { x: e.clientX, y: e.clientY };
+            S.panScroll = { x: viewport.scrollLeft, y: viewport.scrollTop };
+            overlay.style.cursor = 'grabbing';
+            e.preventDefault();
+            return;
+        }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (S.isPanning) {
+            const dx = e.clientX - S.panStart.x;
+            const dy = e.clientY - S.panStart.y;
+            viewport.scrollLeft = S.panScroll.x - dx;
+            viewport.scrollTop = S.panScroll.y - dy;
+            return;
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (S.isPanning) {
+            S.isPanning = false;
+            overlay.style.cursor = '';
+            if (S.mode === 'pan') overlay.style.cursor = 'grab';
+        }
+    });
 
     // ═══════════════════════════════
     //  SELECTION & OCR
