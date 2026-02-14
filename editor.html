@@ -1220,7 +1220,8 @@
         panScroll: null,
         spaceHeld: false,
         prevMode: null,
-        selectedObject: null
+        selectedObject: null,
+        slideImages: null     // PPTX 이미지 모드용
     };
 
     const canvas = document.getElementById('mainCanvas');
@@ -1231,18 +1232,62 @@
     // ═══════════════════════════════
     //  INIT
     // ═══════════════════════════════
+    function loadImg(src) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = src;
+        });
+    }
+
+    async function loadSlideImagesFromDB() {
+        try {
+            const db = await openDB();
+            return new Promise((resolve) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const req = tx.objectStore(STORE_NAME).get('slide_images');
+                req.onsuccess = () => { db.close(); resolve(req.result || null); };
+                req.onerror = () => { db.close(); resolve(null); };
+            });
+        } catch(e) { return null; }
+    }
+
     async function init() {
-        // IndexedDB 우선 + localStorage 폴백에서 PDF 데이터 로드
-        const arrayBuffer = await loadPdfFromStorage();
+        const sourceType = localStorage.getItem('pdf_type') || 'pdf';
         const pdfName = localStorage.getItem('pdf_fileName') || '';
 
-        if (!arrayBuffer) {
-            showToast('PDF 파일이 없습니다. 메인으로 돌아가세요.', 'error');
-            setTimeout(() => { window.location.href = 'index.html'; }, 2000);
-            return;
+        if (sourceType === 'pptx') {
+            // PPTX 이미지 모드
+            const slides = await loadSlideImagesFromDB();
+            if (!slides || slides.length === 0) {
+                showToast('슬라이드 데이터를 찾을 수 없습니다.', 'error');
+                setTimeout(() => { window.location.href = 'index.html'; }, 2000);
+                return;
+            }
+            S.slideImages = slides;
+            S.totalPages = slides.length;
+            document.getElementById('fileNameDisplay').textContent = pdfName;
+            document.getElementById('totalPagesLabel').textContent = S.totalPages;
+            S.currentPage = 1;
+            S.editLayers = {};
+            S.originals = {};
+            S.deletedPages.clear();
+            buildThumbs();
+            buildBottomBar();
+            await renderPage(1);
+            updateZoomLabel();
+            showToast(`${pdfName} 로드 완료 (${S.totalPages}페이지)`, 'success');
+        } else {
+            // PDF 모드
+            const arrayBuffer = await loadPdfFromStorage();
+            if (!arrayBuffer) {
+                showToast('PDF 파일이 없습니다. 메인으로 돌아가세요.', 'error');
+                setTimeout(() => { window.location.href = 'index.html'; }, 2000);
+                return;
+            }
+            await loadPdf(arrayBuffer, pdfName);
         }
-
-        await loadPdf(arrayBuffer, pdfName);
     }
 
     async function loadPdf(arrayBuffer, pdfName) {
@@ -1301,11 +1346,18 @@
     }
 
     async function renderThumb(p, tc) {
-        const page = await S.pdfDoc.getPage(p);
-        const vp = page.getViewport({ scale: 0.25 });
-        tc.width = vp.width;
-        tc.height = vp.height;
-        await page.render({ canvasContext: tc.getContext('2d'), viewport: vp }).promise;
+        if (S.pdfDoc) {
+            const page = await S.pdfDoc.getPage(p);
+            const vp = page.getViewport({ scale: 0.25 });
+            tc.width = vp.width;
+            tc.height = vp.height;
+            await page.render({ canvasContext: tc.getContext('2d'), viewport: vp }).promise;
+        } else if (S.slideImages) {
+            const img = await loadImg(S.slideImages[p - 1]);
+            tc.width = Math.round(img.width * 0.12);
+            tc.height = Math.round(img.height * 0.12);
+            tc.getContext('2d').drawImage(img, 0, 0, tc.width, tc.height);
+        }
     }
 
     // ═══════════════════════════════
@@ -1345,25 +1397,28 @@
     async function renderPage(p) {
         S.currentPage = p;
         S.selectedObject = null;
-
-        // 기존 텍스트 객체 DOM 제거
         container.querySelectorAll('.text-object').forEach(el => el.remove());
 
-        const page = await S.pdfDoc.getPage(p);
-        const vp = page.getViewport({ scale: S.scale });
-        canvas.width = vp.width;
-        canvas.height = vp.height;
+        if (S.pdfDoc) {
+            const page = await S.pdfDoc.getPage(p);
+            const vp = page.getViewport({ scale: S.scale });
+            canvas.width = vp.width;
+            canvas.height = vp.height;
+            await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        } else if (S.slideImages) {
+            const img = await loadImg(S.slideImages[p - 1]);
+            const ratio = S.scale / 2.0;
+            canvas.width = Math.round(img.width * ratio);
+            canvas.height = Math.round(img.height * ratio);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        }
 
-        await page.render({ canvasContext: ctx, viewport: vp }).promise;
-
-        if (!S.originals[p]) {
+        if (!S.originals[p] || S.originals[p].width !== canvas.width || S.originals[p].height !== canvas.height) {
             S.originals[p] = ctx.getImageData(0, 0, canvas.width, canvas.height);
         }
 
-        // 편집 레이어 DOM 복원
         reapplyEdits(p);
 
-        // UI 동기화
         document.querySelectorAll('.slide-thumb').forEach(t => {
             t.classList.toggle('active', parseInt(t.dataset.page) === p);
         });
@@ -2183,24 +2238,22 @@
     });
 
     // ═══════════════════════════════
-    //  EXPORT (PPTX)
+    //  SAVE (PPTX)
     // ═══════════════════════════════
     document.getElementById('btnExport').addEventListener('click', () => {
-        document.getElementById('exportProgress').style.display = 'none';
-        document.getElementById('exportBtns').style.display = 'flex';
-        document.getElementById('exportModal').classList.add('active');
+        savePptx();
     });
     document.getElementById('exportCancel').addEventListener('click', () => {
         document.getElementById('exportModal').classList.remove('active');
     });
 
-    document.getElementById('exportAll').addEventListener('click', async () => {
-        const btns = document.getElementById('exportBtns');
+    async function savePptx() {
         const prog = document.getElementById('exportProgress');
         const bar = document.getElementById('exportProgressBar');
         const txt = document.getElementById('exportProgressText');
-        btns.style.display = 'none';
+        document.getElementById('exportBtns').style.display = 'none';
         prog.style.display = 'block';
+        document.getElementById('exportModal').classList.add('active');
 
         try {
             const pptx = new PptxGenJS();
@@ -2216,17 +2269,25 @@
                 const i = activePages[idx];
                 const pct = Math.round(((idx + 1) / activePages.length) * 100);
                 bar.style.width = pct + '%';
-                txt.textContent = `슬라이드 ${i} / ${S.totalPages} 처리 중... (${pct}%)`;
+                txt.textContent = `슬라이드 ${i} / ${S.totalPages} 저장 중... (${pct}%)`;
 
-                const page = await S.pdfDoc.getPage(i);
-                const vp = page.getViewport({ scale: exportScale });
-                canvas.width = vp.width;
-                canvas.height = vp.height;
-                await page.render({ canvasContext: ctx, viewport: vp }).promise;
+                // 슬라이드 원본 렌더링 (PDF 또는 이미지)
+                if (S.pdfDoc) {
+                    const page = await S.pdfDoc.getPage(i);
+                    const vp = page.getViewport({ scale: exportScale });
+                    canvas.width = vp.width;
+                    canvas.height = vp.height;
+                    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+                } else if (S.slideImages) {
+                    const img = await loadImg(S.slideImages[i - 1]);
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                }
 
                 // 편집 내용을 export scale로 다시 그리기
+                const ratio = S.pdfDoc ? (exportScale / S.scale) : (canvas.width / (S.originals[i] ? S.originals[i].width : canvas.width));
                 (S.editLayers[i] || []).forEach(l => {
-                    const ratio = exportScale / S.scale;
                     const scaled = {
                         bgColor: l.bgColor,
                         text: l.text,
@@ -2248,9 +2309,9 @@
 
                 const imgData = canvas.toDataURL('image/png');
                 const slideW = 10;
-                const slideH = slideW * (vp.height / vp.width);
-                pptx.defineLayout({ name: 'PDF', width: slideW, height: slideH });
-                pptx.layout = 'PDF';
+                const slideH = slideW * (canvas.height / canvas.width);
+                pptx.defineLayout({ name: 'SLIDE', width: slideW, height: slideH });
+                pptx.layout = 'SLIDE';
 
                 const slide = pptx.addSlide();
                 slide.addImage({ data: imgData, x: 0, y: 0, w: slideW, h: slideH });
@@ -2259,20 +2320,20 @@
             }
 
             txt.textContent = 'PPTX 파일 생성 중...';
-            const fileName = (localStorage.getItem('pdf_fileName') || 'slides').replace(/\.pdf$/i, '');
+            const fileName = (localStorage.getItem('pdf_fileName') || 'slides').replace(/\.(pdf|pptx)$/i, '');
             await pptx.writeFile({ fileName: fileName + '.pptx' });
 
             await renderPage(savedPage);
             document.getElementById('exportModal').classList.remove('active');
             showToast(`PPTX 저장 완료 (${activePages.length}슬라이드)`, 'success');
-            addProcessed(`PPTX 내보내기 (${activePages.length}장)`);
+            addProcessed(`PPTX 저장 (${activePages.length}장)`);
         } catch (err) {
             console.error(err);
             prog.style.display = 'none';
-            btns.style.display = 'flex';
-            showToast('PPTX 생성 중 오류 발생', 'error');
+            document.getElementById('exportBtns').style.display = 'flex';
+            showToast('PPTX 저장 중 오류 발생', 'error');
         }
-    });
+    }
 
     // ═══════════════════════════════
     //  PROCESSED LIST
