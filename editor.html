@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NotebookLM Slide Editor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', -apple-system, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ════════════════════════════════════════
+           상단 툴바
+           ════════════════════════════════════════ */
+        .top-bar {
+            height: 48px;
+            background: #161b22;
+            border-bottom: 1px solid #21262d;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            z-index: 100;
+            flex-shrink: 0;
+        }
+
+        /* 좌측 로고 */
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-right: 24px;
+        }
+
+        .logo-icon {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, #586efa, #8b5cf6);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-icon svg { width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 2; }
+
+        .logo-text {
+            font-size: 14px;
+            font-weight: 700;
+            color: #f0f6fc;
+            white-space: nowrap;
+        }
+
+        .logo-sub {
+            font-size: 10px;
+            color: #484f58;
+            font-weight: 400;
+            display: block;
+            margin-top: -2px;
+        }
+
+        /* 중앙 모드 버튼 */
+        .mode-buttons {
+            display: flex;
+            gap: 4px;
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 8px;
+            padding: 3px;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .mode-btn {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: #7d8590;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+            font-family: inherit;
+        }
+
+        .mode-btn:hover { color: #c9d1d9; }
+        .mode-btn.active {
+            background: #21262d;
+            color: #f0f6fc;
+        }
+
+        .mode-btn kbd {
+            font-family: inherit;
+            font-size: 10px;
+            color: #484f58;
+            margin-right: 4px;
+        }
+
+        /* 우측 버튼들 */
+        .top-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .top-divider {
+            width: 1px;
+            height: 24px;
+            background: #21262d;
+            margin: 0 8px;
+        }
+
+        .top-btn {
+            padding: 6px 12px;
+            border: 1px solid #21262d;
+            border-radius: 6px;
+            background: transparent;
+            color: #c9d1d9;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: inherit;
+        }
+        .top-btn:hover { background: #21262d; }
+
+        .top-btn-delete {
+            color: #f87171;
+            border-color: rgba(239,68,68,0.25);
+        }
+        .top-btn-delete:hover { background: rgba(239,68,68,0.1); }
+        .top-btn-delete.active {
+            background: rgba(239,68,68,0.15);
+            border-color: rgba(239,68,68,0.4);
+        }
+
+        .top-btn-export {
+            background: linear-gradient(135deg, #586efa, #7c3aed);
+            border: none;
+            color: #fff;
+        }
+        .top-btn-export:hover { opacity: 0.9; }
+
+        /* 토글 스위치 */
+        .toggle-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toggle-label {
+            font-size: 12px;
+            color: #7d8590;
+        }
+
+        /* ════════════════════════════════════════
+           메인 3단 레이아웃
+           ════════════════════════════════════════ */
+        .editor-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ── 좌측: 슬라이드 썸네일 ── */
+        .left-panel {
+            width: 160px;
+            background: #0d1117;
+            border-right: 1px solid #21262d;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .left-panel-header {
+            padding: 12px 12px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #484f58;
+            border-bottom: 1px solid #21262d;
+        }
+
+        .slide-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .slide-list::-webkit-scrollbar { width: 4px; }
+        .slide-list::-webkit-scrollbar-thumb { background: #21262d; border-radius: 2px; }
+
+        .slide-thumb {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16/9;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid transparent;
+            margin-bottom: 6px;
+            transition: all 0.15s;
+            background: #161b22;
+        }
+        .slide-thumb:hover { border-color: #30363d; }
+        .slide-thumb.active { border-color: #586efa; box-shadow: 0 0 0 1px #586efa; }
+
+        .slide-thumb.marked-delete {
+            opacity: 0.4;
+            border-color: #f87171;
+        }
+
+        .slide-thumb.marked-delete::after {
+            content: 'DELETE';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%,-50%);
+            font-size: 9px;
+            font-weight: 700;
+            color: #fff;
+            background: rgba(239,68,68,0.8);
+            padding: 2px 6px;
+            border-radius: 3px;
+            letter-spacing: 0.5px;
+        }
+
+        .slide-thumb canvas { width: 100%; height: 100%; display: block; }
+
+        .slide-thumb-num {
+            position: absolute;
+            bottom: 3px;
+            left: 6px;
+            font-size: 9px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.7);
+            background: rgba(0,0,0,0.5);
+            padding: 1px 5px;
+            border-radius: 3px;
+        }
+
+        /* ── 중앙: 캔버스 ── */
+        .center-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #0d1117;
+            position: relative;
+        }
+
+        .canvas-viewport {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+            padding: 24px;
+            background:
+                linear-gradient(rgba(13,17,23,0.95), rgba(13,17,23,0.95)),
+                repeating-conic-gradient(#161b22 0% 25%, transparent 0% 50%) 0 0 / 20px 20px;
+        }
+
+        .canvas-container {
+            position: relative;
+            box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+            border-radius: 2px;
+            line-height: 0;
+        }
+
+        #mainCanvas {
+            display: block;
+            max-width: 100%;
+            max-height: calc(100vh - 140px);
+            border-radius: 2px;
+        }
+
+        /* 선택 오버레이 */
+        .selection-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            cursor: crosshair;
+            z-index: 10;
+        }
+
+        .selection-overlay.pan-mode { cursor: grab; }
+        .selection-overlay.pan-mode:active { cursor: grabbing; }
+        .selection-overlay.delete-mode { cursor: default; }
+
+        .sel-box {
+            position: absolute;
+            border: 2px dashed #8b5cf6;
+            background: rgba(139,92,246,0.12);
+            border-radius: 2px;
+            pointer-events: none;
+        }
+
+        /* 텍스트 편집 레이어 */
+        .edit-layer {
+            position: absolute;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .edit-layer-header {
+            display: flex;
+            gap: 3px;
+            margin-bottom: 2px;
+            justify-content: flex-end;
+        }
+
+        .el-btn {
+            width: 22px;
+            height: 22px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.1s;
+        }
+
+        .el-btn-ok { background: #238636; color: #fff; }
+        .el-btn-ok:hover { background: #2ea043; }
+        .el-btn-cancel { background: #da3633; color: #fff; }
+        .el-btn-cancel:hover { background: #f85149; }
+
+        .edit-textarea {
+            width: 100%;
+            height: 100%;
+            border: 2px solid #8b5cf6;
+            background: transparent;
+            color: #000;
+            padding: 2px 4px;
+            font-size: 16px;
+            line-height: 1.3;
+            resize: none;
+            outline: none;
+            border-radius: 2px;
+        }
+
+        /* ── 하단 슬라이드 네비게이션 ── */
+        .bottom-bar {
+            height: 48px;
+            background: #161b22;
+            border-top: 1px solid #21262d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 0 16px;
+            flex-shrink: 0;
+        }
+
+        .page-dot {
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 6px;
+            background: #21262d;
+            color: #7d8590;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+        .page-dot:hover { background: #30363d; color: #c9d1d9; }
+        .page-dot.active { background: #586efa; color: #fff; }
+        .page-dot.deleted { background: #da3633; color: #fff; opacity: 0.5; }
+
+        .page-dot-more {
+            color: #484f58;
+            font-size: 11px;
+            padding: 0 4px;
+        }
+
+        /* ── 우측: 속성 패널 ── */
+        .right-panel {
+            width: 260px;
+            background: #161b22;
+            border-left: 1px solid #21262d;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+
+        .right-panel::-webkit-scrollbar { width: 4px; }
+        .right-panel::-webkit-scrollbar-thumb { background: #21262d; border-radius: 2px; }
+
+        .rp-section {
+            padding: 14px;
+            border-bottom: 1px solid #21262d;
+        }
+
+        .rp-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #484f58;
+            margin-bottom: 10px;
+        }
+
+        .rp-hint {
+            font-size: 12px;
+            color: #7d8590;
+            line-height: 1.5;
+            padding: 8px 10px;
+            background: rgba(88,110,250,0.06);
+            border: 1px solid rgba(88,110,250,0.1);
+            border-radius: 6px;
+        }
+
+        .rp-hint strong { color: #8b9cf7; }
+
+        /* 속성 행 */
+        .rp-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            min-height: 28px;
+        }
+
+        .rp-label {
+            font-size: 12px;
+            color: #7d8590;
+            flex-shrink: 0;
+        }
+
+        .rp-input {
+            width: 80px;
+            padding: 4px 8px;
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 5px;
+            color: #c9d1d9;
+            font-size: 12px;
+            outline: none;
+            font-family: inherit;
+        }
+        .rp-input:focus { border-color: #586efa; }
+
+        .rp-select {
+            width: 130px;
+            padding: 4px 6px;
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 5px;
+            color: #c9d1d9;
+            font-size: 12px;
+            outline: none;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .rp-select option { background: #0d1117; }
+
+        .rp-color {
+            width: 30px;
+            height: 24px;
+            border: 1px solid #21262d;
+            border-radius: 4px;
+            cursor: pointer;
+            background: none;
+            padding: 1px;
+        }
+
+        .rp-range {
+            width: 80px;
+            accent-color: #586efa;
+            height: 4px;
+        }
+
+        .rp-val {
+            font-size: 11px;
+            color: #484f58;
+            min-width: 36px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .rp-btn {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #21262d;
+            background: #21262d;
+            color: #c9d1d9;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+            text-align: center;
+            margin-bottom: 6px;
+        }
+        .rp-btn:hover { background: #30363d; }
+
+        .rp-btn-danger {
+            border-color: rgba(239,68,68,0.25);
+            background: rgba(239,68,68,0.1);
+            color: #f87171;
+        }
+        .rp-btn-danger:hover { background: rgba(239,68,68,0.2); }
+
+        .rp-btn-accent {
+            border: none;
+            background: linear-gradient(135deg, #586efa, #7c3aed);
+            color: #fff;
+        }
+        .rp-btn-accent:hover { opacity: 0.9; }
+
+        /* OCR 상태 */
+        .ocr-bar {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            background: rgba(139,92,246,0.08);
+            border: 1px solid rgba(139,92,246,0.15);
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        .ocr-bar.active { display: flex; }
+
+        .ocr-spinner {
+            width: 14px; height: 14px;
+            border: 2px solid rgba(139,92,246,0.2);
+            border-top-color: #8b5cf6;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .ocr-bar span { font-size: 11px; color: #a78bfa; }
+
+        /* 로고 제거 섹션 */
+        .logo-preview-box {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 6px;
+            position: relative;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        .logo-marker-vis {
+            position: absolute;
+            background: rgba(239,68,68,0.2);
+            border: 2px dashed #f87171;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        .logo-marker-vis::after {
+            content: 'LOGO';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%,-50%);
+            font-size: 8px;
+            font-weight: 700;
+            color: #f87171;
+        }
+
+        /* Processed 리스트 */
+        .processed-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .processed-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 8px;
+            background: rgba(255,255,255,0.02);
+            border-radius: 4px;
+            margin-bottom: 3px;
+            font-size: 11px;
+        }
+
+        .processed-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .processed-dot.done { background: #3fb950; }
+        .processed-dot.pending { background: #484f58; }
+
+        /* ════════════════════════════════════════
+           토스트
+           ════════════════════════════════════════ */
+        .toast {
+            position: fixed;
+            top: 56px;
+            right: 16px;
+            padding: 10px 16px;
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #c9d1d9;
+            z-index: 500;
+            transform: translateX(calc(100% + 20px));
+            transition: transform 0.25s;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+        }
+        .toast.show { transform: translateX(0); }
+        .toast.error { border-color: rgba(239,68,68,0.4); }
+        .toast.success { border-color: rgba(63,185,80,0.4); }
+
+        /* ════════════════════════════════════════
+           모달
+           ════════════════════════════════════════ */
+        .modal-bg {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 400;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-bg.active { display: flex; }
+
+        .modal-box {
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 12px;
+            padding: 24px;
+            width: 400px;
+            max-width: 90vw;
+        }
+
+        .modal-box h3 { font-size: 16px; color: #f0f6fc; margin-bottom: 10px; }
+        .modal-box p { font-size: 13px; color: #7d8590; line-height: 1.5; }
+
+        .modal-btns {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+            justify-content: flex-end;
+        }
+
+        .m-btn {
+            padding: 7px 16px;
+            border-radius: 6px;
+            border: 1px solid #21262d;
+            background: #21262d;
+            color: #c9d1d9;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .m-btn:hover { background: #30363d; }
+
+        .m-btn-primary {
+            background: #586efa;
+            border-color: #586efa;
+            color: #fff;
+        }
+        .m-btn-primary:hover { background: #4c5fd7; }
+
+        .m-btn-danger {
+            background: #da3633;
+            border-color: #da3633;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ═══ 상단 툴바 ═══ -->
+    <div class="top-bar">
+        <a class="logo" href="index.html" style="text-decoration:none">
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div>
+                <span class="logo-text">NotebookLM Slide Editor</span>
+                <span class="logo-sub" id="fileNameDisplay">파일을 불러오세요</span>
+            </div>
+        </a>
+
+        <div class="mode-buttons">
+            <button class="mode-btn active" data-mode="pan" id="modePan"><kbd>Space</kbd>+ Drag</button>
+            <button class="mode-btn" data-mode="select" id="modeSelect"><kbd></kbd>Drag Selection</button>
+            <button class="mode-btn" data-mode="zoom" id="modeZoom"><kbd>Ctrl</kbd>+ Wheel Zoom</button>
+        </div>
+
+        <div class="top-right">
+            <button class="top-btn top-btn-delete" id="btnDeleteMode">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                페이지 삭제 모드
+            </button>
+
+            <div class="top-divider"></div>
+
+            <button class="top-btn" id="btnLogoRemove">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                로고 삭제
+            </button>
+
+            <div class="top-divider"></div>
+
+            <button class="top-btn top-btn-export" id="btnExport">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                PDF 내보내기 구조
+            </button>
+        </div>
+    </div>
+
+    <!-- ═══ 메인 3단 레이아웃 ═══ -->
+    <div class="editor-layout">
+
+        <!-- 좌측: 슬라이드 목록 -->
+        <div class="left-panel">
+            <div class="left-panel-header">슬라이드 (<span id="totalPagesLabel">0</span>)</div>
+            <div class="slide-list" id="slideList"></div>
+        </div>
+
+        <!-- 중앙: 캔버스 -->
+        <div class="center-panel">
+            <div class="canvas-viewport" id="canvasViewport">
+                <div class="canvas-container" id="canvasContainer">
+                    <canvas id="mainCanvas"></canvas>
+                    <div class="selection-overlay" id="selOverlay"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 우측: 속성 패널 -->
+        <div class="right-panel" id="rightPanel">
+
+            <!-- 힌트 -->
+            <div class="rp-section" id="sectionHint">
+                <div class="rp-hint">
+                    <strong>텍스트 수정:</strong> 상단에서 <em>Drag Selection</em> 모드 선택 후 슬라이드 위의 텍스트 영역을 드래그하세요.<br><br>
+                    <strong>로고 삭제:</strong> 상단 <em>로고 삭제</em> 버튼을 클릭하세요.
+                </div>
+            </div>
+
+            <!-- OCR 상태 -->
+            <div class="rp-section" style="padding-top:0; padding-bottom:8px; border:none; display:none;" id="sectionOcr">
+                <div class="ocr-bar active" id="ocrBar">
+                    <div class="ocr-spinner"></div>
+                    <span id="ocrText">OCR 분석 중...</span>
+                </div>
+            </div>
+
+            <!-- 텍스트 수정 도구 -->
+            <div class="rp-section" id="sectionText">
+                <div class="rp-title">텍스트 수정 도구</div>
+
+                <div class="rp-row">
+                    <span class="rp-label">폰트</span>
+                    <select class="rp-select" id="propFont">
+                        <option value="'Malgun Gothic', sans-serif">맑은 고딕</option>
+                        <option value="'Nanum Gothic', sans-serif">나눔고딕</option>
+                        <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
+                        <option value="Arial, sans-serif">Arial</option>
+                        <option value="'Nanum Myeongjo', serif">나눔명조</option>
+                        <option value="'Gulim', sans-serif">굴림</option>
+                    </select>
+                </div>
+
+                <div class="rp-row">
+                    <span class="rp-label">크기</span>
+                    <input type="number" class="rp-input" id="propSize" value="16" min="8" max="120" style="width:60px">
+                    <span class="rp-val">px</span>
+                </div>
+
+                <div class="rp-row">
+                    <span class="rp-label">굵기</span>
+                    <select class="rp-select" id="propWeight" style="width:90px">
+                        <option value="300">Light</option>
+                        <option value="400" selected>Regular</option>
+                        <option value="500">Medium</option>
+                        <option value="600">SemiBold</option>
+                        <option value="700">Bold</option>
+                    </select>
+                </div>
+
+                <div class="rp-row">
+                    <span class="rp-label">글자색</span>
+                    <input type="color" class="rp-color" id="propColor" value="#000000">
+                </div>
+
+                <div class="rp-row">
+                    <span class="rp-label">자간</span>
+                    <input type="range" class="rp-range" id="propLetterSp" min="-3" max="15" value="0" step="0.5">
+                    <span class="rp-val" id="valLetterSp">0</span>
+                </div>
+
+                <div class="rp-row">
+                    <span class="rp-label">장평</span>
+                    <input type="range" class="rp-range" id="propScaleX" min="60" max="140" value="100">
+                    <span class="rp-val" id="valScaleX">100%</span>
+                </div>
+
+                <div class="rp-row">
+                    <span class="rp-label">행간</span>
+                    <input type="range" class="rp-range" id="propLineH" min="80" max="250" value="140">
+                    <span class="rp-val" id="valLineH">140%</span>
+                </div>
+            </div>
+
+            <!-- 배경 레이어 -->
+            <div class="rp-section" id="sectionBg">
+                <div class="rp-title">배경 레이어</div>
+
+                <div class="rp-row">
+                    <span class="rp-label">배경색</span>
+                    <input type="color" class="rp-color" id="propBgColor" value="#ffffff">
+                    <button class="rp-btn" id="btnEyedrop" style="width:auto; padding:4px 10px; margin:0; font-size:11px;">스포이드</button>
+                </div>
+
+                <div class="rp-row">
+                    <span class="rp-label">여백</span>
+                    <input type="range" class="rp-range" id="propPad" min="0" max="20" value="4">
+                    <span class="rp-val" id="valPad">4px</span>
+                </div>
+            </div>
+
+            <!-- 로고 삭제 설정 -->
+            <div class="rp-section" id="sectionLogo" style="display:none">
+                <div class="rp-title">로고 삭제</div>
+
+                <div class="logo-preview-box" id="logoPreviewBox">
+                    <div class="logo-marker-vis" id="logoMarkerVis"></div>
+                </div>
+
+                <div class="rp-row">
+                    <span class="rp-label">위치</span>
+                    <select class="rp-select" id="logoPos" style="width:110px">
+                        <option value="bottom-right" selected>우측 하단</option>
+                        <option value="bottom-left">좌측 하단</option>
+                        <option value="top-right">우측 상단</option>
+                        <option value="top-left">좌측 상단</option>
+                    </select>
+                </div>
+
+                <div class="rp-row">
+                    <span class="rp-label">너비</span>
+                    <input type="range" class="rp-range" id="logoW" min="30" max="300" value="140">
+                    <span class="rp-val" id="valLogoW">140</span>
+                </div>
+
+                <div class="rp-row">
+                    <span class="rp-label">높이</span>
+                    <input type="range" class="rp-range" id="logoH" min="15" max="150" value="40">
+                    <span class="rp-val" id="valLogoH">40</span>
+                </div>
+
+                <button class="rp-btn rp-btn-danger" id="btnLogoAllRemove" style="margin-top:6px;">모든 슬라이드 로고 삭제</button>
+                <button class="rp-btn" id="btnLogoOneRemove">현재 슬라이드만 삭제</button>
+            </div>
+
+            <!-- Processed 기록 -->
+            <div class="rp-section" id="sectionProcessed">
+                <div class="rp-title">Processed (기록)</div>
+                <div class="processed-list" id="processedList">
+                    <div style="font-size:11px; color:#484f58; text-align:center; padding:12px 0;">편집 기록이 없습니다</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ═══ 하단 슬라이드 번호 ═══ -->
+    <div class="bottom-bar" id="bottomBar"></div>
+
+    <!-- 모달 -->
+    <div class="modal-bg" id="exportModal">
+        <div class="modal-box">
+            <h3>슬라이드 저장</h3>
+            <p>편집된 슬라이드를 PNG 이미지로 저장합니다.</p>
+            <div class="modal-btns">
+                <button class="m-btn" id="exportCancel">취소</button>
+                <button class="m-btn m-btn-primary" id="exportCurrent">현재 슬라이드</button>
+                <button class="m-btn m-btn-primary" id="exportAll">전체 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    // ═══════════════════════════════
+    //  STATE
+    // ═══════════════════════════════
+    const S = {
+        pdfDoc: null,
+        currentPage: 1,
+        totalPages: 0,
+        scale: 1.5,
+        mode: 'pan',          // pan | select | zoom
+        deleteMode: false,
+        deletedPages: new Set(),
+        editLayers: {},        // page -> [{bgColor, text, rect, styles, padding}]
+        originals: {},         // page -> ImageData
+        isSelecting: false,
+        selStart: null,
+        selEnd: null,
+        eyedropActive: false,
+        logoVisible: false
+    };
+
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('selOverlay');
+    const container = document.getElementById('canvasContainer');
+
+    // ═══════════════════════════════
+    //  INIT
+    // ═══════════════════════════════
+    async function init() {
+        const pdfData = sessionStorage.getItem('pdfData');
+        const pdfName = sessionStorage.getItem('pdfFileName');
+        if (!pdfData) {
+            showToast('PDF 파일이 없습니다. 메인으로 돌아가세요.', 'error');
+            return;
+        }
+        document.getElementById('fileNameDisplay').textContent = pdfName || '';
+
+        const raw = atob(pdfData);
+        const u8 = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) u8[i] = raw.charCodeAt(i);
+
+        S.pdfDoc = await pdfjsLib.getDocument({ data: u8 }).promise;
+        S.totalPages = S.pdfDoc.numPages;
+        document.getElementById('totalPagesLabel').textContent = S.totalPages;
+
+        buildThumbs();
+        buildBottomBar();
+        await renderPage(1);
+    }
+
+    // ═══════════════════════════════
+    //  THUMBNAILS
+    // ═══════════════════════════════
+    function buildThumbs() {
+        const list = document.getElementById('slideList');
+        list.innerHTML = '';
+        for (let i = 1; i <= S.totalPages; i++) {
+            const div = document.createElement('div');
+            div.className = 'slide-thumb' + (i === 1 ? ' active' : '');
+            div.dataset.page = i;
+
+            const c = document.createElement('canvas');
+            div.appendChild(c);
+
+            const num = document.createElement('span');
+            num.className = 'slide-thumb-num';
+            num.textContent = i;
+            div.appendChild(num);
+
+            div.addEventListener('click', () => {
+                if (S.deleteMode) {
+                    toggleDeletePage(i, div);
+                    return;
+                }
+                document.querySelectorAll('.slide-thumb').forEach(t => t.classList.remove('active'));
+                div.classList.add('active');
+                renderPage(i);
+            });
+
+            list.appendChild(div);
+            renderThumb(i, c);
+        }
+    }
+
+    async function renderThumb(p, tc) {
+        const page = await S.pdfDoc.getPage(p);
+        const vp = page.getViewport({ scale: 0.25 });
+        tc.width = vp.width;
+        tc.height = vp.height;
+        await page.render({ canvasContext: tc.getContext('2d'), viewport: vp }).promise;
+    }
+
+    // ═══════════════════════════════
+    //  BOTTOM BAR
+    // ═══════════════════════════════
+    function buildBottomBar() {
+        const bar = document.getElementById('bottomBar');
+        bar.innerHTML = '';
+        const maxShow = 30;
+        for (let i = 1; i <= Math.min(S.totalPages, maxShow); i++) {
+            const btn = document.createElement('button');
+            btn.className = 'page-dot' + (i === S.currentPage ? ' active' : '');
+            if (S.deletedPages.has(i)) btn.classList.add('deleted');
+            btn.textContent = i;
+            btn.addEventListener('click', () => renderPage(i));
+            bar.appendChild(btn);
+        }
+        if (S.totalPages > maxShow) {
+            const more = document.createElement('span');
+            more.className = 'page-dot-more';
+            more.textContent = `... ${S.totalPages}`;
+            bar.appendChild(more);
+        }
+    }
+
+    function updateBottomBar() {
+        document.querySelectorAll('.page-dot').forEach(d => {
+            const p = parseInt(d.textContent);
+            d.classList.toggle('active', p === S.currentPage);
+            d.classList.toggle('deleted', S.deletedPages.has(p));
+        });
+    }
+
+    // ═══════════════════════════════
+    //  RENDER PAGE
+    // ═══════════════════════════════
+    async function renderPage(p) {
+        S.currentPage = p;
+        const page = await S.pdfDoc.getPage(p);
+        const vp = page.getViewport({ scale: S.scale });
+        canvas.width = vp.width;
+        canvas.height = vp.height;
+        overlay.style.width = vp.width + 'px';
+        overlay.style.height = vp.height + 'px';
+
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+        if (!S.originals[p]) {
+            S.originals[p] = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        }
+
+        // 편집 레이어 복원
+        reapplyEdits(p);
+
+        // UI 동기화
+        document.querySelectorAll('.slide-thumb').forEach(t => {
+            t.classList.toggle('active', parseInt(t.dataset.page) === p);
+        });
+        updateBottomBar();
+    }
+
+    function reapplyEdits(p) {
+        (S.editLayers[p] || []).forEach(l => {
+            ctx.fillStyle = l.bgColor;
+            ctx.fillRect(l.rect.x - l.padding, l.rect.y - l.padding, l.rect.w + l.padding * 2, l.rect.h + l.padding * 2);
+            ctx.save();
+            ctx.fillStyle = l.styles.color;
+            ctx.font = `${l.styles.fontWeight} ${l.styles.fontSize}px ${l.styles.font}`;
+            ctx.textBaseline = 'top';
+            const lineH = l.styles.fontSize * l.styles.lineHeight;
+            let ty = l.rect.y + 2;
+            l.text.split('\n').forEach(line => {
+                if (l.styles.letterSpacing !== 0 || l.styles.scaleX !== 1) {
+                    ctx.save();
+                    ctx.translate(l.rect.x + 2, ty);
+                    ctx.scale(l.styles.scaleX, 1);
+                    let tx = 0;
+                    for (const ch of line) {
+                        ctx.fillText(ch, tx, 0);
+                        tx += ctx.measureText(ch).width + l.styles.letterSpacing;
+                    }
+                    ctx.restore();
+                } else {
+                    ctx.fillText(line, l.rect.x + 2, ty);
+                }
+                ty += lineH;
+            });
+            ctx.restore();
+        });
+    }
+
+    // ═══════════════════════════════
+    //  MODES
+    // ═══════════════════════════════
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            S.mode = btn.dataset.mode;
+            overlay.className = 'selection-overlay';
+            if (S.mode === 'pan') overlay.classList.add('pan-mode');
+            if (S.deleteMode) overlay.classList.add('delete-mode');
+        });
+    });
+
+    // 줌 (Ctrl + Wheel)
+    document.getElementById('canvasViewport').addEventListener('wheel', (e) => {
+        if (e.ctrlKey) {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            S.scale = Math.max(0.5, Math.min(4, S.scale + delta));
+            renderPage(S.currentPage);
+        }
+    }, { passive: false });
+
+    // ═══════════════════════════════
+    //  SELECTION & OCR
+    // ═══════════════════════════════
+    overlay.addEventListener('mousedown', (e) => {
+        if (S.mode !== 'select' || S.deleteMode || S.eyedropActive) return;
+        clearSelBox();
+        const r = overlay.getBoundingClientRect();
+        S.isSelecting = true;
+        S.selStart = { x: e.clientX - r.left, y: e.clientY - r.top };
+    });
+
+    overlay.addEventListener('mousemove', (e) => {
+        if (!S.isSelecting) return;
+        const r = overlay.getBoundingClientRect();
+        S.selEnd = { x: e.clientX - r.left, y: e.clientY - r.top };
+        drawSelBox();
+    });
+
+    overlay.addEventListener('mouseup', (e) => {
+        if (!S.isSelecting) return;
+        S.isSelecting = false;
+        const r = overlay.getBoundingClientRect();
+        S.selEnd = { x: e.clientX - r.left, y: e.clientY - r.top };
+        const rect = getSelRect();
+        if (rect.w > 10 && rect.h > 10) {
+            detectBg(rect);
+            runOCR(rect);
+        } else {
+            clearSelBox();
+        }
+    });
+
+    // 스포이드
+    overlay.addEventListener('click', (e) => {
+        if (!S.eyedropActive) return;
+        const r = overlay.getBoundingClientRect();
+        const px = ctx.getImageData(e.clientX - r.left, e.clientY - r.top, 1, 1).data;
+        document.getElementById('propBgColor').value = rgbHex(px[0], px[1], px[2]);
+        S.eyedropActive = false;
+        overlay.style.cursor = '';
+        if (S.mode === 'pan') overlay.classList.add('pan-mode');
+        showToast('배경색 선택 완료', 'success');
+    });
+
+    document.getElementById('btnEyedrop').addEventListener('click', () => {
+        S.eyedropActive = true;
+        overlay.style.cursor = 'cell';
+        overlay.classList.remove('pan-mode');
+        showToast('슬라이드에서 색상을 클릭하세요');
+    });
+
+    function getSelRect() {
+        const x = Math.min(S.selStart.x, S.selEnd.x);
+        const y = Math.min(S.selStart.y, S.selEnd.y);
+        return { x, y, w: Math.abs(S.selEnd.x - S.selStart.x), h: Math.abs(S.selEnd.y - S.selStart.y) };
+    }
+
+    function drawSelBox() {
+        clearSelBox();
+        const r = getSelRect();
+        const box = document.createElement('div');
+        box.className = 'sel-box';
+        box.style.cssText = `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px`;
+        overlay.appendChild(box);
+    }
+
+    function clearSelBox() {
+        overlay.querySelectorAll('.sel-box').forEach(b => b.remove());
+    }
+
+    function detectBg(rect) {
+        const img = ctx.getImageData(rect.x, rect.y, rect.w, rect.h);
+        const colors = {};
+        for (let i = 0; i < img.data.length; i += 4) {
+            const k = `${Math.round(img.data[i]/8)*8},${Math.round(img.data[i+1]/8)*8},${Math.round(img.data[i+2]/8)*8}`;
+            colors[k] = (colors[k] || 0) + 1;
+        }
+        let mk = '', mc = 0;
+        for (const [k, v] of Object.entries(colors)) { if (v > mc) { mc = v; mk = k; } }
+        const [r, g, b] = mk.split(',').map(Number);
+        document.getElementById('propBgColor').value = rgbHex(r, g, b);
+    }
+
+    async function runOCR(rect) {
+        const sec = document.getElementById('sectionOcr');
+        sec.style.display = 'block';
+        document.getElementById('ocrText').textContent = 'OCR 텍스트 인식 중...';
+
+        try {
+            const tmp = document.createElement('canvas');
+            tmp.width = rect.w; tmp.height = rect.h;
+            tmp.getContext('2d').drawImage(canvas, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
+
+            const result = await Tesseract.recognize(tmp.toDataURL('image/png'), 'kor+eng', {
+                logger: m => {
+                    if (m.status === 'recognizing text')
+                        document.getElementById('ocrText').textContent = `OCR 인식 중... ${Math.round(m.progress * 100)}%`;
+                }
+            });
+
+            sec.style.display = 'none';
+            createEditLayer(rect, result.data.text.trim());
+            showToast(result.data.text.trim() ? 'OCR 완료' : '텍스트 미감지 - 직접 입력하세요', result.data.text.trim() ? 'success' : '');
+        } catch (err) {
+            sec.style.display = 'none';
+            console.error(err);
+            createEditLayer(rect, '');
+            showToast('OCR 오류 발생', 'error');
+        }
+    }
+
+    // ═══════════════════════════════
+    //  EDIT LAYER
+    // ═══════════════════════════════
+    function createEditLayer(rect, text) {
+        clearSelBox();
+        const bgColor = document.getElementById('propBgColor').value;
+        const pad = parseInt(document.getElementById('propPad').value);
+
+        const layer = document.createElement('div');
+        layer.className = 'edit-layer';
+        layer.style.left = (rect.x - pad) + 'px';
+        layer.style.top = (rect.y - pad) + 'px';
+        layer.style.width = (rect.w + pad * 2) + 'px';
+        layer.style.backgroundColor = bgColor;
+
+        const header = document.createElement('div');
+        header.className = 'edit-layer-header';
+
+        const btnOk = document.createElement('button');
+        btnOk.className = 'el-btn el-btn-ok';
+        btnOk.innerHTML = '&#10003;';
+
+        const btnNo = document.createElement('button');
+        btnNo.className = 'el-btn el-btn-cancel';
+        btnNo.innerHTML = '&#10005;';
+
+        header.appendChild(btnOk);
+        header.appendChild(btnNo);
+
+        const ta = document.createElement('textarea');
+        ta.className = 'edit-textarea';
+        ta.value = text;
+        ta.style.height = (rect.h + pad * 2) + 'px';
+        applyStyles(ta);
+
+        btnOk.addEventListener('click', () => confirmEdit(layer, rect));
+        btnNo.addEventListener('click', () => layer.remove());
+
+        layer.appendChild(header);
+        layer.appendChild(ta);
+        container.appendChild(layer);
+        ta.focus();
+    }
+
+    function applyStyles(ta) {
+        ta.style.fontFamily = document.getElementById('propFont').value;
+        ta.style.fontSize = document.getElementById('propSize').value + 'px';
+        ta.style.fontWeight = document.getElementById('propWeight').value;
+        ta.style.color = document.getElementById('propColor').value;
+        ta.style.letterSpacing = document.getElementById('propLetterSp').value + 'px';
+        ta.style.transform = `scaleX(${document.getElementById('propScaleX').value / 100})`;
+        ta.style.lineHeight = document.getElementById('propLineH').value + '%';
+    }
+
+    // 속성 변경 시 실시간 반영
+    ['propFont','propSize','propWeight','propColor','propLetterSp','propScaleX','propLineH'].forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+            document.querySelectorAll('.edit-textarea').forEach(applyStyles);
+            document.getElementById('valLetterSp').textContent = document.getElementById('propLetterSp').value;
+            document.getElementById('valScaleX').textContent = document.getElementById('propScaleX').value + '%';
+            document.getElementById('valLineH').textContent = document.getElementById('propLineH').value + '%';
+        });
+    });
+
+    document.getElementById('propPad').addEventListener('input', () => {
+        document.getElementById('valPad').textContent = document.getElementById('propPad').value + 'px';
+    });
+
+    document.getElementById('propBgColor').addEventListener('input', () => {
+        document.querySelectorAll('.edit-layer').forEach(l => {
+            l.style.backgroundColor = document.getElementById('propBgColor').value;
+        });
+    });
+
+    function confirmEdit(layer, rect) {
+        const ta = layer.querySelector('.edit-textarea');
+        const text = ta.value;
+        const bgColor = layer.style.backgroundColor;
+        const pad = parseInt(document.getElementById('propPad').value);
+        const styles = {
+            font: document.getElementById('propFont').value,
+            fontSize: parseInt(document.getElementById('propSize').value),
+            fontWeight: document.getElementById('propWeight').value,
+            color: document.getElementById('propColor').value,
+            letterSpacing: parseFloat(document.getElementById('propLetterSp').value),
+            scaleX: document.getElementById('propScaleX').value / 100,
+            lineHeight: document.getElementById('propLineH').value / 100
+        };
+
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(rect.x - pad, rect.y - pad, rect.w + pad * 2, rect.h + pad * 2);
+
+        ctx.save();
+        ctx.fillStyle = styles.color;
+        ctx.font = `${styles.fontWeight} ${styles.fontSize}px ${styles.font}`;
+        ctx.textBaseline = 'top';
+        const lineH = styles.fontSize * styles.lineHeight;
+        let ty = rect.y + 2;
+        text.split('\n').forEach(line => {
+            if (styles.letterSpacing !== 0 || styles.scaleX !== 1) {
+                ctx.save();
+                ctx.translate(rect.x + 2, ty);
+                ctx.scale(styles.scaleX, 1);
+                let tx = 0;
+                for (const ch of line) { ctx.fillText(ch, tx, 0); tx += ctx.measureText(ch).width + styles.letterSpacing; }
+                ctx.restore();
+            } else {
+                ctx.fillText(line, rect.x + 2, ty);
+            }
+            ty += lineH;
+        });
+        ctx.restore();
+
+        layer.remove();
+        if (!S.editLayers[S.currentPage]) S.editLayers[S.currentPage] = [];
+        S.editLayers[S.currentPage].push({ bgColor, text, rect, styles, padding: pad });
+
+        addProcessed(`슬라이드 ${S.currentPage} 텍스트 수정`);
+        updateThumb(S.currentPage);
+        showToast('텍스트 적용 완료', 'success');
+    }
+
+    function updateThumb(p) {
+        const th = document.querySelector(`.slide-thumb[data-page="${p}"] canvas`);
+        if (th) {
+            const tc = th.getContext('2d');
+            tc.clearRect(0, 0, th.width, th.height);
+            tc.drawImage(canvas, 0, 0, th.width, th.height);
+        }
+    }
+
+    // ═══════════════════════════════
+    //  DELETE MODE
+    // ═══════════════════════════════
+    document.getElementById('btnDeleteMode').addEventListener('click', () => {
+        S.deleteMode = !S.deleteMode;
+        const btn = document.getElementById('btnDeleteMode');
+        btn.classList.toggle('active', S.deleteMode);
+        overlay.classList.toggle('delete-mode', S.deleteMode);
+        if (S.deleteMode) {
+            showToast('삭제 모드: 좌측 썸네일을 클릭하여 삭제할 슬라이드를 선택하세요');
+        }
+    });
+
+    function toggleDeletePage(p, div) {
+        if (S.deletedPages.has(p)) {
+            S.deletedPages.delete(p);
+            div.classList.remove('marked-delete');
+        } else {
+            if (S.totalPages - S.deletedPages.size <= 1) {
+                showToast('최소 1개 슬라이드가 필요합니다', 'error');
+                return;
+            }
+            S.deletedPages.add(p);
+            div.classList.add('marked-delete');
+        }
+        updateBottomBar();
+        addProcessed(`슬라이드 ${p} ${S.deletedPages.has(p) ? '삭제 표시' : '삭제 해제'}`);
+    }
+
+    // ═══════════════════════════════
+    //  LOGO REMOVAL
+    // ═══════════════════════════════
+    document.getElementById('btnLogoRemove').addEventListener('click', () => {
+        S.logoVisible = !S.logoVisible;
+        document.getElementById('sectionLogo').style.display = S.logoVisible ? 'block' : 'none';
+        document.getElementById('sectionText').style.display = S.logoVisible ? 'none' : 'block';
+        document.getElementById('sectionBg').style.display = S.logoVisible ? 'none' : 'block';
+        document.getElementById('sectionHint').style.display = 'none';
+        if (S.logoVisible) updateLogoMarker();
+    });
+
+    function getLogoRect() {
+        const w = parseInt(document.getElementById('logoW').value) * S.scale;
+        const h = parseInt(document.getElementById('logoH').value) * S.scale;
+        const m = 10 * S.scale;
+        const pos = document.getElementById('logoPos').value;
+        let x, y;
+        switch (pos) {
+            case 'bottom-right': x = canvas.width - w - m; y = canvas.height - h - m; break;
+            case 'bottom-left': x = m; y = canvas.height - h - m; break;
+            case 'top-right': x = canvas.width - w - m; y = m; break;
+            case 'top-left': x = m; y = m; break;
+        }
+        return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+    }
+
+    function updateLogoMarker() {
+        const mk = document.getElementById('logoMarkerVis');
+        const pos = document.getElementById('logoPos').value;
+        const m = '5%', w = '35%', h = '25%';
+        switch (pos) {
+            case 'bottom-right': mk.style.cssText = `right:${m};bottom:${m};width:${w};height:${h}`; break;
+            case 'bottom-left': mk.style.cssText = `left:${m};bottom:${m};width:${w};height:${h}`; break;
+            case 'top-right': mk.style.cssText = `right:${m};top:${m};width:${w};height:${h}`; break;
+            case 'top-left': mk.style.cssText = `left:${m};top:${m};width:${w};height:${h}`; break;
+        }
+    }
+
+    ['logoPos','logoW','logoH'].forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+            document.getElementById('valLogoW').textContent = document.getElementById('logoW').value;
+            document.getElementById('valLogoH').textContent = document.getElementById('logoH').value;
+            updateLogoMarker();
+        });
+    });
+
+    function analyzeLogoBg(rect) {
+        const sr = 20 * S.scale;
+        const colors = {};
+        const areas = [
+            { x: rect.x, y: Math.max(0, rect.y - sr), w: rect.w, h: Math.min(sr, rect.y) },
+            { x: rect.x, y: rect.y + rect.h, w: rect.w, h: Math.min(sr, canvas.height - rect.y - rect.h) },
+            { x: Math.max(0, rect.x - sr), y: rect.y, w: Math.min(sr, rect.x), h: rect.h },
+            { x: rect.x + rect.w, y: rect.y, w: Math.min(sr, canvas.width - rect.x - rect.w), h: rect.h }
+        ];
+        areas.forEach(a => {
+            if (a.w <= 0 || a.h <= 0) return;
+            const d = ctx.getImageData(a.x, a.y, a.w, a.h);
+            for (let i = 0; i < d.data.length; i += 4) {
+                const k = `${Math.round(d.data[i]/4)*4},${Math.round(d.data[i+1]/4)*4},${Math.round(d.data[i+2]/4)*4}`;
+                colors[k] = (colors[k] || 0) + 1;
+            }
+        });
+        let mk = '255,255,255', mc = 0;
+        for (const [k, v] of Object.entries(colors)) { if (v > mc) { mc = v; mk = k; } }
+        const [r, g, b] = mk.split(',').map(Number);
+        return `rgb(${r},${g},${b})`;
+    }
+
+    document.getElementById('btnLogoOneRemove').addEventListener('click', async () => {
+        if (S.originals[S.currentPage]) ctx.putImageData(S.originals[S.currentPage], 0, 0);
+        reapplyEdits(S.currentPage);
+        const rect = getLogoRect();
+        ctx.fillStyle = analyzeLogoBg(rect);
+        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+        updateThumb(S.currentPage);
+        addProcessed(`슬라이드 ${S.currentPage} 로고 삭제`);
+        showToast('로고 삭제 완료', 'success');
+    });
+
+    document.getElementById('btnLogoAllRemove').addEventListener('click', async () => {
+        for (let i = 1; i <= S.totalPages; i++) {
+            await renderPage(i);
+            const rect = getLogoRect();
+            ctx.fillStyle = analyzeLogoBg(rect);
+            ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+            updateThumb(i);
+        }
+        await renderPage(1);
+        addProcessed(`전체 슬라이드 로고 삭제 (${S.totalPages}장)`);
+        showToast(`${S.totalPages}개 슬라이드 로고 삭제 완료!`, 'success');
+    });
+
+    // ═══════════════════════════════
+    //  EXPORT
+    // ═══════════════════════════════
+    document.getElementById('btnExport').addEventListener('click', () => {
+        document.getElementById('exportModal').classList.add('active');
+    });
+    document.getElementById('exportCancel').addEventListener('click', () => {
+        document.getElementById('exportModal').classList.remove('active');
+    });
+
+    document.getElementById('exportCurrent').addEventListener('click', () => {
+        document.getElementById('exportModal').classList.remove('active');
+        const link = document.createElement('a');
+        link.download = `slide_${S.currentPage}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        showToast('현재 슬라이드 저장 완료', 'success');
+    });
+
+    document.getElementById('exportAll').addEventListener('click', async () => {
+        document.getElementById('exportModal').classList.remove('active');
+        for (let i = 1; i <= S.totalPages; i++) {
+            if (S.deletedPages.has(i)) continue;
+            await renderPage(i);
+            const link = document.createElement('a');
+            link.download = `slide_${i}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            await new Promise(r => setTimeout(r, 300));
+        }
+        await renderPage(S.currentPage);
+        showToast('전체 슬라이드 저장 완료!', 'success');
+    });
+
+    // ═══════════════════════════════
+    //  PROCESSED LIST
+    // ═══════════════════════════════
+    function addProcessed(msg) {
+        const list = document.getElementById('processedList');
+        if (list.querySelector('div[style]')) list.innerHTML = '';
+        const item = document.createElement('div');
+        item.className = 'processed-item';
+        item.innerHTML = `<span class="processed-dot done"></span>${msg}`;
+        list.prepend(item);
+    }
+
+    // ═══════════════════════════════
+    //  KEYBOARD SHORTCUTS
+    // ═══════════════════════════════
+    document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+
+        if (e.key === 'ArrowLeft' && S.currentPage > 1) renderPage(S.currentPage - 1);
+        if (e.key === 'ArrowRight' && S.currentPage < S.totalPages) renderPage(S.currentPage + 1);
+
+        // Ctrl+Z: 실행취소
+        if (e.ctrlKey && e.key === 'z') {
+            const layers = S.editLayers[S.currentPage];
+            if (layers && layers.length > 0) {
+                layers.pop();
+                renderPage(S.currentPage);
+                showToast('실행 취소', 'success');
+            }
+        }
+    });
+
+    // ═══════════════════════════════
+    //  UTILS
+    // ═══════════════════════════════
+    function rgbHex(r, g, b) {
+        return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    }
+
+    function showToast(msg, type = '') {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'toast ' + type;
+        setTimeout(() => t.classList.add('show'), 10);
+        setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // ═══ START ═══
+    init();
+    </script>
+</body>
+</html>
