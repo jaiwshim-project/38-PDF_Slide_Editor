@@ -916,6 +916,31 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     // ═══════════════════════════════
+    //  IndexedDB 헬퍼
+    // ═══════════════════════════════
+    const DB_NAME = 'PdfSlideEditorDB';
+    const DB_STORE = 'pdfFiles';
+
+    function openDB() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, 1);
+            req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function dbLoad(key) {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(DB_STORE, 'readonly');
+            const req = tx.objectStore(DB_STORE).get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    // ═══════════════════════════════
     //  STATE
     // ═══════════════════════════════
     const S = {
@@ -950,18 +975,23 @@
     //  INIT
     // ═══════════════════════════════
     async function init() {
-        const pdfData = sessionStorage.getItem('pdfData');
-        const pdfName = sessionStorage.getItem('pdfFileName');
-        if (!pdfData) {
+        // IndexedDB에서 PDF 데이터 로드
+        let arrayBuffer;
+        let pdfName;
+        try {
+            arrayBuffer = await dbLoad('pdfData');
+            pdfName = await dbLoad('pdfFileName');
+        } catch(err) {
+            console.error('IndexedDB 로드 실패:', err);
+        }
+
+        if (!arrayBuffer) {
             showToast('PDF 파일이 없습니다. 메인으로 돌아가세요.', 'error');
             return;
         }
         document.getElementById('fileNameDisplay').textContent = pdfName || '';
 
-        const raw = atob(pdfData);
-        const u8 = new Uint8Array(raw.length);
-        for (let i = 0; i < raw.length; i++) u8[i] = raw.charCodeAt(i);
-
+        const u8 = new Uint8Array(arrayBuffer);
         S.pdfDoc = await pdfjsLib.getDocument({ data: u8 }).promise;
         S.totalPages = S.pdfDoc.numPages;
         document.getElementById('totalPagesLabel').textContent = S.totalPages;

@@ -692,14 +692,57 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        // ── 상태 관리 ──
+        // ═══ IndexedDB 헬퍼 (용량 제한 없음) ═══
+        const DB_NAME = 'PdfSlideEditorDB';
+        const DB_STORE = 'pdfFiles';
+
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function dbSave(key, value) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(DB_STORE, 'readwrite');
+                tx.objectStore(DB_STORE).put(value, key);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function dbLoad(key) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(DB_STORE, 'readonly');
+                const req = tx.objectStore(DB_STORE).get(key);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function dbClear() {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(DB_STORE, 'readwrite');
+                tx.objectStore(DB_STORE).clear();
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        // ═══ 상태 관리 ═══
         const state = {
             pdfFile: null,
             pdfPages: 0,
             pdfData: null
         };
 
-        // ── DOM 요소 ──
+        // ═══ DOM 요소 ═══
         const uploadZone = document.getElementById('uploadZone');
         const fileInput = document.getElementById('fileInput');
         const uploadLoading = document.getElementById('uploadLoading');
@@ -715,7 +758,7 @@
         const cardLogo = document.getElementById('cardLogo');
         const cardDelete = document.getElementById('cardDelete');
 
-        // ── 업로드 이벤트 ──
+        // ═══ 업로드 이벤트 ═══
         uploadZone.addEventListener('click', () => {
             if (!uploadLoading.classList.contains('active')) {
                 fileInput.click();
@@ -746,7 +789,7 @@
             clearFile();
         });
 
-        // ── 파일 처리 ──
+        // ═══ 파일 처리 ═══
         function handleFile(file) {
             if (file.type !== 'application/pdf') {
                 showToast('PDF 파일만 업로드 가능합니다.', 'error');
@@ -766,21 +809,26 @@
             uploadZone.querySelector('.upload-text').style.display = 'none';
             uploadZone.querySelector('.upload-hint').style.display = 'none';
 
-            // PDF 읽기 (Base64 변환)
             const reader = new FileReader();
-            reader.onload = function(e) {
-                state.pdfData = e.target.result;
+            reader.onload = async function(e) {
+                const arrayBuffer = e.target.result;
 
-                // 간단한 페이지 수 추출 (PDF 바이너리에서 /Page 카운트)
-                const pdfText = new Uint8Array(e.target.result);
-                // ArrayBuffer를 base64로 변환하여 저장
-                const base64 = arrayBufferToBase64(e.target.result);
-
-                // 페이지 수를 간이 추정 (정확하지 않을 수 있음)
-                const textDecoder = new TextDecoder('latin1');
-                const pdfString = textDecoder.decode(pdfText);
+                // 페이지 수 간이 추정
+                const pdfBytes = new Uint8Array(arrayBuffer);
+                const pdfString = new TextDecoder('latin1').decode(pdfBytes);
                 const pageMatches = pdfString.match(/\/Type\s*\/Page[^s]/g);
                 state.pdfPages = pageMatches ? pageMatches.length : 1;
+
+                // IndexedDB에 ArrayBuffer 직접 저장 (용량 제한 없음)
+                try {
+                    await dbSave('pdfData', arrayBuffer);
+                    await dbSave('pdfFileName', file.name);
+                    await dbSave('pdfFileSize', file.size);
+                    await dbSave('pdfPages', state.pdfPages);
+                } catch(err) {
+                    console.error('IndexedDB 저장 실패:', err);
+                    showToast('파일 저장 중 오류가 발생했습니다.', 'error');
+                }
 
                 setTimeout(() => {
                     uploadLoading.classList.remove('active');
@@ -788,35 +836,21 @@
                     uploadZone.querySelector('.upload-text').style.display = 'block';
                     uploadZone.querySelector('.upload-hint').style.display = 'block';
 
-                    // 파일 정보 표시
                     fileName.textContent = file.name;
                     fileMeta.textContent = `${formatFileSize(file.size)} · 약 ${state.pdfPages}페이지`;
                     fileInfo.classList.add('active');
 
-                    // 상태 업데이트
                     statusDot.classList.remove('inactive');
                     statusText.textContent = `${file.name} 로드 완료 · ${state.pdfPages}페이지`;
 
-                    // 메뉴 활성화
                     enableCards();
-
-                    // 세션 스토리지에 저장
-                    try {
-                        sessionStorage.setItem('pdfFileName', file.name);
-                        sessionStorage.setItem('pdfFileSize', file.size);
-                        sessionStorage.setItem('pdfPages', state.pdfPages);
-                        sessionStorage.setItem('pdfData', base64);
-                    } catch(err) {
-                        console.warn('세션 스토리지 저장 실패 (파일이 너무 클 수 있음):', err);
-                    }
-
                     showToast(`${file.name} 로드 완료`, 'success');
-                }, 800);
+                }, 600);
             };
             reader.readAsArrayBuffer(file);
         }
 
-        function clearFile() {
+        async function clearFile() {
             state.pdfFile = null;
             state.pdfPages = 0;
             state.pdfData = null;
@@ -825,10 +859,7 @@
             statusDot.classList.add('inactive');
             statusText.textContent = 'PDF 파일을 업로드하세요';
             disableCards();
-            sessionStorage.removeItem('pdfFileName');
-            sessionStorage.removeItem('pdfFileSize');
-            sessionStorage.removeItem('pdfPages');
-            sessionStorage.removeItem('pdfData');
+            await dbClear();
         }
 
         function enableCards() {
@@ -843,22 +874,11 @@
             cardDelete.classList.add('disabled');
         }
 
-        // ── 유틸리티 ──
+        // ═══ 유틸리티 ═══
         function formatFileSize(bytes) {
             if (bytes < 1024) return bytes + ' B';
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
             return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-        }
-
-        function arrayBufferToBase64(buffer) {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            const chunkSize = 8192;
-            for (let i = 0; i < bytes.length; i += chunkSize) {
-                const chunk = bytes.subarray(i, i + chunkSize);
-                binary += String.fromCharCode.apply(null, chunk);
-            }
-            return btoa(binary);
         }
 
         function showToast(message, type = '') {
@@ -868,22 +888,26 @@
             setTimeout(() => toast.classList.remove('show'), 3000);
         }
 
-        // ── 세션 복원 ──
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedName = sessionStorage.getItem('pdfFileName');
-            if (savedName) {
-                const savedSize = sessionStorage.getItem('pdfFileSize');
-                const savedPages = sessionStorage.getItem('pdfPages');
-                state.pdfPages = parseInt(savedPages) || 1;
+        // ═══ 세션 복원 (IndexedDB) ═══
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const savedName = await dbLoad('pdfFileName');
+                if (savedName) {
+                    const savedSize = await dbLoad('pdfFileSize');
+                    const savedPages = await dbLoad('pdfPages');
+                    state.pdfPages = savedPages || 1;
 
-                fileName.textContent = savedName;
-                fileMeta.textContent = `${formatFileSize(parseInt(savedSize))} · 약 ${state.pdfPages}페이지`;
-                fileInfo.classList.add('active');
+                    fileName.textContent = savedName;
+                    fileMeta.textContent = `${formatFileSize(savedSize)} · 약 ${state.pdfPages}페이지`;
+                    fileInfo.classList.add('active');
 
-                statusDot.classList.remove('inactive');
-                statusText.textContent = `${savedName} 로드 완료 · ${state.pdfPages}페이지`;
+                    statusDot.classList.remove('inactive');
+                    statusText.textContent = `${savedName} 로드 완료 · ${state.pdfPages}페이지`;
 
-                enableCards();
+                    enableCards();
+                }
+            } catch(err) {
+                console.warn('세션 복원 실패:', err);
             }
         });
     </script>
