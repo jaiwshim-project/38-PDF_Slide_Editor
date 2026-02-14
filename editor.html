@@ -273,35 +273,6 @@
             background: none;
         }
 
-        /* PDF 업로드 오버레이 (fallback) */
-        .upload-overlay {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(13,17,23,0.95);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 50;
-            gap: 16px;
-        }
-
-        .upload-overlay.hidden { display: none; }
-
-        .upload-box {
-            border: 2px dashed #30363d;
-            border-radius: 12px;
-            padding: 40px 48px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .upload-box:hover { border-color: #586efa; background: rgba(88,110,250,0.04); }
-
-        .upload-box svg { width: 48px; height: 48px; stroke: #484f58; fill: none; margin-bottom: 12px; }
-        .upload-box p { font-size: 15px; color: #7d8590; margin-bottom: 4px; }
-        .upload-box small { font-size: 12px; color: #484f58; }
-
         /* ════════════════════════════════════════
            메인 3단 레이아웃
            ════════════════════════════════════════ */
@@ -950,20 +921,6 @@
 
         <!-- 중앙: 캔버스 -->
         <div class="center-panel">
-            <!-- PDF 업로드 fallback -->
-            <div class="upload-overlay" id="uploadOverlay">
-                <div class="upload-box" id="uploadBox">
-                    <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="17 8 12 3 7 8"/>
-                        <line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                    <p>PDF 파일을 드래그하거나 클릭하여 업로드</p>
-                    <small>또는 메인 메뉴에서 업로드 후 이동하세요</small>
-                </div>
-                <input type="file" id="editorFileInput" accept=".pdf" style="display:none">
-            </div>
-
             <div class="canvas-viewport" id="canvasViewport">
                 <div class="canvas-container" id="canvasContainer">
                     <canvas id="mainCanvas"></canvas>
@@ -1132,28 +1089,22 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     // ═══════════════════════════════
-    //  IndexedDB 헬퍼
+    //  PDF 데이터 로드 (localStorage 청크)
     // ═══════════════════════════════
-    const DB_NAME = 'PdfSlideEditorDB';
-    const DB_STORE = 'pdfFiles';
-
-    function openDB() {
-        return new Promise((resolve, reject) => {
-            const req = indexedDB.open(DB_NAME, 1);
-            req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async function dbLoad(key) {
-        const db = await openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction(DB_STORE, 'readonly');
-            const req = tx.objectStore(DB_STORE).get(key);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
+    function loadPdfFromStorage() {
+        const chunkCount = parseInt(localStorage.getItem('pdf_chunks') || '0');
+        if (chunkCount === 0) return null;
+        let base64 = '';
+        for (let i = 0; i < chunkCount; i++) {
+            const chunk = localStorage.getItem('pdf_chunk_' + i);
+            if (!chunk) return null;
+            base64 += chunk;
+        }
+        // base64 → ArrayBuffer
+        const binary = atob(base64);
+        const buf = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+        return buf.buffer;
     }
 
     // ═══════════════════════════════
@@ -1191,19 +1142,13 @@
     //  INIT
     // ═══════════════════════════════
     async function init() {
-        // IndexedDB에서 PDF 데이터 로드
-        let arrayBuffer;
-        let pdfName;
-        try {
-            arrayBuffer = await dbLoad('pdfData');
-            pdfName = await dbLoad('pdfFileName');
-        } catch(err) {
-            console.error('IndexedDB 로드 실패:', err);
-        }
+        // localStorage 청크에서 PDF 데이터 로드
+        const arrayBuffer = loadPdfFromStorage();
+        const pdfName = localStorage.getItem('pdf_fileName') || '';
 
         if (!arrayBuffer) {
-            // PDF가 없으면 업로드 오버레이 표시
-            document.getElementById('uploadOverlay').classList.remove('hidden');
+            showToast('PDF 파일이 없습니다. 메인으로 돌아가세요.', 'error');
+            setTimeout(() => { window.location.href = 'index.html'; }, 2000);
             return;
         }
 
@@ -1211,7 +1156,6 @@
     }
 
     async function loadPdf(arrayBuffer, pdfName) {
-        document.getElementById('uploadOverlay').classList.add('hidden');
         document.getElementById('fileNameDisplay').textContent = pdfName || '';
 
         const u8 = new Uint8Array(arrayBuffer);
@@ -1230,53 +1174,6 @@
         await renderPage(1);
         updateZoomLabel();
         showToast(`${pdfName || 'PDF'} 로드 완료 (${S.totalPages}페이지)`, 'success');
-    }
-
-    // ═══════════════════════════════
-    //  에디터 내 직접 PDF 업로드
-    // ═══════════════════════════════
-    const uploadOverlay = document.getElementById('uploadOverlay');
-    const uploadBox = document.getElementById('uploadBox');
-    const editorFileInput = document.getElementById('editorFileInput');
-
-    uploadBox.addEventListener('click', () => editorFileInput.click());
-
-    uploadOverlay.addEventListener('dragover', (e) => { e.preventDefault(); uploadBox.style.borderColor = '#586efa'; });
-    uploadOverlay.addEventListener('dragleave', () => { uploadBox.style.borderColor = '#30363d'; });
-    uploadOverlay.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadBox.style.borderColor = '#30363d';
-        if (e.dataTransfer.files.length > 0) handleEditorUpload(e.dataTransfer.files[0]);
-    });
-
-    editorFileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) handleEditorUpload(e.target.files[0]);
-    });
-
-    async function handleEditorUpload(file) {
-        if (file.type !== 'application/pdf') { showToast('PDF 파일만 가능합니다', 'error'); return; }
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            const ab = e.target.result;
-            try {
-                await dbSave('pdfData', ab);
-                await dbSave('pdfFileName', file.name);
-                await dbSave('pdfFileSize', file.size);
-            } catch(err) { console.error(err); }
-            await loadPdf(ab, file.name);
-        };
-        reader.readAsArrayBuffer(file);
-    }
-
-    // IndexedDB 저장 헬퍼
-    async function dbSave(key, value) {
-        const db = await openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction(DB_STORE, 'readwrite');
-            tx.objectStore(DB_STORE).put(value, key);
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
-        });
     }
 
     // ═══════════════════════════════

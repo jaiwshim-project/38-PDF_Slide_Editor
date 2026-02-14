@@ -692,47 +692,45 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        // ═══ IndexedDB 헬퍼 (용량 제한 없음) ═══
-        const DB_NAME = 'PdfSlideEditorDB';
-        const DB_STORE = 'pdfFiles';
+        // ═══ localStorage 청크 저장 (file:// 호환) ═══
+        const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB per chunk
 
-        function openDB() {
-            return new Promise((resolve, reject) => {
-                const req = indexedDB.open(DB_NAME, 1);
-                req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
-            });
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const chunkSize = 8192;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                const chunk = bytes.subarray(i, i + chunkSize);
+                binary += String.fromCharCode.apply(null, chunk);
+            }
+            return btoa(binary);
         }
 
-        async function dbSave(key, value) {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(DB_STORE, 'readwrite');
-                tx.objectStore(DB_STORE).put(value, key);
-                tx.oncomplete = () => resolve();
-                tx.onerror = () => reject(tx.error);
-            });
+        function savePdfToStorage(arrayBuffer, fileName, fileSize, pages) {
+            // 이전 데이터 정리
+            clearPdfStorage();
+
+            const base64 = arrayBufferToBase64(arrayBuffer);
+            const chunkCount = Math.ceil(base64.length / CHUNK_SIZE);
+
+            for (let i = 0; i < chunkCount; i++) {
+                localStorage.setItem('pdf_chunk_' + i, base64.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE));
+            }
+            localStorage.setItem('pdf_chunks', chunkCount.toString());
+            localStorage.setItem('pdf_fileName', fileName);
+            localStorage.setItem('pdf_fileSize', fileSize.toString());
+            localStorage.setItem('pdf_pages', pages.toString());
         }
 
-        async function dbLoad(key) {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(DB_STORE, 'readonly');
-                const req = tx.objectStore(DB_STORE).get(key);
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
-            });
-        }
-
-        async function dbClear() {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const tx = db.transaction(DB_STORE, 'readwrite');
-                tx.objectStore(DB_STORE).clear();
-                tx.oncomplete = () => resolve();
-                tx.onerror = () => reject(tx.error);
-            });
+        function clearPdfStorage() {
+            const oldChunks = parseInt(localStorage.getItem('pdf_chunks') || '0');
+            for (let i = 0; i < oldChunks; i++) {
+                localStorage.removeItem('pdf_chunk_' + i);
+            }
+            localStorage.removeItem('pdf_chunks');
+            localStorage.removeItem('pdf_fileName');
+            localStorage.removeItem('pdf_fileSize');
+            localStorage.removeItem('pdf_pages');
         }
 
         // ═══ 상태 관리 ═══
@@ -796,21 +794,20 @@
                 return;
             }
 
-            if (file.size > 50 * 1024 * 1024) {
-                showToast('파일 크기는 50MB를 초과할 수 없습니다.', 'error');
+            if (file.size > 10 * 1024 * 1024) {
+                showToast('파일 크기는 10MB를 초과할 수 없습니다. (localStorage 제한)', 'error');
                 return;
             }
 
             state.pdfFile = file;
 
-            // 로딩 표시
             uploadLoading.classList.add('active');
             uploadZone.querySelector('.upload-icon').style.display = 'none';
             uploadZone.querySelector('.upload-text').style.display = 'none';
             uploadZone.querySelector('.upload-hint').style.display = 'none';
 
             const reader = new FileReader();
-            reader.onload = async function(e) {
+            reader.onload = function(e) {
                 const arrayBuffer = e.target.result;
 
                 // 페이지 수 간이 추정
@@ -819,14 +816,11 @@
                 const pageMatches = pdfString.match(/\/Type\s*\/Page[^s]/g);
                 state.pdfPages = pageMatches ? pageMatches.length : 1;
 
-                // IndexedDB에 ArrayBuffer 직접 저장 (용량 제한 없음)
+                // localStorage에 청크로 저장
                 try {
-                    await dbSave('pdfData', arrayBuffer);
-                    await dbSave('pdfFileName', file.name);
-                    await dbSave('pdfFileSize', file.size);
-                    await dbSave('pdfPages', state.pdfPages);
+                    savePdfToStorage(arrayBuffer, file.name, file.size, state.pdfPages);
                 } catch(err) {
-                    console.error('IndexedDB 저장 실패:', err);
+                    console.error('저장 실패:', err);
                     showToast('파일 저장 중 오류가 발생했습니다.', 'error');
                 }
 
@@ -850,7 +844,7 @@
             reader.readAsArrayBuffer(file);
         }
 
-        async function clearFile() {
+        function clearFile() {
             state.pdfFile = null;
             state.pdfPages = 0;
             state.pdfData = null;
@@ -859,7 +853,7 @@
             statusDot.classList.add('inactive');
             statusText.textContent = 'PDF 파일을 업로드하세요';
             disableCards();
-            await dbClear();
+            clearPdfStorage();
         }
 
         function enableCards() {
@@ -888,26 +882,22 @@
             setTimeout(() => toast.classList.remove('show'), 3000);
         }
 
-        // ═══ 세션 복원 (IndexedDB) ═══
-        window.addEventListener('DOMContentLoaded', async () => {
-            try {
-                const savedName = await dbLoad('pdfFileName');
-                if (savedName) {
-                    const savedSize = await dbLoad('pdfFileSize');
-                    const savedPages = await dbLoad('pdfPages');
-                    state.pdfPages = savedPages || 1;
+        // ═══ 세션 복원 ═══
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedName = localStorage.getItem('pdf_fileName');
+            if (savedName) {
+                const savedSize = localStorage.getItem('pdf_fileSize');
+                const savedPages = localStorage.getItem('pdf_pages');
+                state.pdfPages = parseInt(savedPages) || 1;
 
-                    fileName.textContent = savedName;
-                    fileMeta.textContent = `${formatFileSize(savedSize)} · 약 ${state.pdfPages}페이지`;
-                    fileInfo.classList.add('active');
+                fileName.textContent = savedName;
+                fileMeta.textContent = `${formatFileSize(parseInt(savedSize))} · 약 ${state.pdfPages}페이지`;
+                fileInfo.classList.add('active');
 
-                    statusDot.classList.remove('inactive');
-                    statusText.textContent = `${savedName} 로드 완료 · ${state.pdfPages}페이지`;
+                statusDot.classList.remove('inactive');
+                statusText.textContent = `${savedName} 로드 완료 · ${state.pdfPages}페이지`;
 
-                    enableCards();
-                }
-            } catch(err) {
-                console.warn('세션 복원 실패:', err);
+                enableCards();
             }
         });
     </script>
