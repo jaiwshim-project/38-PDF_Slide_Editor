@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -282,6 +283,7 @@
             display: flex;
             flex: 1;
             overflow: hidden;
+            position: relative;
         }
 
         /* ── 좌측: 슬라이드 썸네일 ── */
@@ -843,6 +845,226 @@
             border-color: #ef4444;
             color: #fff;
         }
+
+        /* ════════════════════════════════════════
+           좌측 아이콘 바
+           ════════════════════════════════════════ */
+        .icon-bar {
+            width: 40px;
+            background: #0b1120;
+            border-right: 1px solid rgba(255,255,255,0.08);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 12px;
+            gap: 4px;
+            flex-shrink: 0;
+            z-index: 30;
+        }
+
+        .icon-bar-btn {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: #94a3b8;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            position: relative;
+        }
+        .icon-bar-btn:hover { background: rgba(255,255,255,0.08); color: #e2e8f0; }
+        .icon-bar-btn.active { background: rgba(139,92,246,0.2); color: #c4b5fd; }
+        .icon-bar-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+        /* 좌측 오버레이 패널 */
+        .left-overlay-panel {
+            position: absolute;
+            top: 0;
+            left: 40px;
+            bottom: 0;
+            width: 240px;
+            height: 100%;
+            background: #0f172a;
+            border-right: 1px solid rgba(255,255,255,0.1);
+            z-index: 25;
+            display: none;
+            flex-direction: column;
+            box-shadow: 4px 0 16px rgba(0,0,0,0.4);
+        }
+        .left-overlay-panel.active { display: flex; }
+
+        .left-overlay-header {
+            padding: 14px 14px 10px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #e2e8f0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .left-overlay-close {
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 4px;
+            background: transparent;
+            color: #94a3b8;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+        .left-overlay-close:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+        .left-overlay-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        .left-overlay-body::-webkit-scrollbar { width: 4px; }
+        .left-overlay-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+        /* 레이어 아이템 */
+        .layer-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 6px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            transition: all 0.12s;
+        }
+        .layer-item:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+        .layer-item.selected { border-color: #8b5cf6; background: rgba(139,92,246,0.08); }
+
+        .layer-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        .layer-icon.text { background: rgba(59,130,246,0.2); color: #60a5fa; }
+        .layer-icon.image { background: rgba(16,185,129,0.2); color: #34d399; }
+
+        .layer-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .layer-info-name {
+            font-size: 12px;
+            color: #e2e8f0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .layer-info-type {
+            font-size: 10px;
+            color: #64748b;
+        }
+
+        .layer-actions {
+            display: flex;
+            gap: 2px;
+        }
+        .layer-action-btn {
+            width: 22px;
+            height: 22px;
+            border: none;
+            border-radius: 4px;
+            background: transparent;
+            color: #94a3b8;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+        }
+        .layer-action-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .layer-action-btn.danger:hover { background: rgba(239,68,68,0.2); color: #f87171; }
+
+        /* ════════════════════════════════════════
+           하단 네비게이션 (화살표 + 페이지 번호)
+           ════════════════════════════════════════ */
+        .nav-arrow {
+            width: 32px;
+            height: 32px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            background: transparent;
+            color: #e2e8f0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+        .nav-arrow:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .nav-arrow:disabled { opacity: 0.3; cursor: default; }
+        .nav-arrow svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+        .nav-page-info {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e2e8f0;
+            min-width: 60px;
+            text-align: center;
+            user-select: none;
+        }
+        .nav-page-info span { color: #94a3b8; font-weight: 400; }
+
+        /* ════════════════════════════════════════
+           이미지 객체
+           ════════════════════════════════════════ */
+        .image-object {
+            position: absolute;
+            cursor: move;
+            z-index: 15;
+            border: 2px solid transparent;
+            user-select: none;
+            transition: border-color 0.15s;
+        }
+        .image-object:hover { border-color: rgba(16,185,129,0.4); }
+        .image-object.selected {
+            border-color: #10b981;
+            box-shadow: 0 0 0 1px #10b981;
+        }
+
+        .image-object img {
+            width: 100%;
+            height: 100%;
+            display: block;
+            pointer-events: none;
+        }
+
+        .image-object .text-object-actions { display: none; }
+        .image-object.selected .text-object-actions { display: flex; }
+
+        .image-resize-handle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #10b981;
+            border: 1px solid #fff;
+            border-radius: 2px;
+            cursor: nwse-resize;
+            z-index: 17;
+        }
+        .image-resize-handle.br { bottom: -5px; right: -5px; }
     </style>
 </head>
 <body>
@@ -866,6 +1088,13 @@
         </div>
 
         <div class="top-right">
+            <button class="top-btn" id="btnOpenFile">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                파일 열기
+            </button>
+
+            <div class="top-divider"></div>
+
             <button class="top-btn top-btn-delete" id="btnDeleteMode">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 페이지 삭제 모드
@@ -880,6 +1109,13 @@
 
             <div class="top-divider"></div>
 
+            <button class="top-btn" id="btnAddImage">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                이미지 추가
+            </button>
+
+            <div class="top-divider"></div>
+
             <button class="top-btn" id="btnImportPptx">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
                 PPTX 불러오기
@@ -888,6 +1124,11 @@
             <button class="top-btn top-btn-export" id="btnExport">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 PPTX 저장
+            </button>
+
+            <button class="top-btn top-btn-export" id="btnExportPdf">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                PDF 내보내기
             </button>
         </div>
     </div>
@@ -963,8 +1204,47 @@
         </div>
     </div>
 
+    <!-- 숨김 input -->
+    <input type="file" id="openFileInput" accept=".pdf,.pptx" style="display:none">
+    <input type="file" id="imageFileInput" accept="image/*" style="display:none">
+
     <!-- ═══ 메인 3단 레이아웃 ═══ -->
     <div class="editor-layout">
+
+        <!-- 좌측 아이콘 바 -->
+        <div class="icon-bar">
+            <button class="icon-bar-btn" id="iconHistory" title="편집 기록">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </button>
+            <button class="icon-bar-btn" id="iconDelete" title="슬라이드 삭제">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+            <button class="icon-bar-btn" id="iconLayers" title="레이어 관리">
+                <svg viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            </button>
+        </div>
+
+        <!-- 좌측 오버레이: 히스토리 -->
+        <div class="left-overlay-panel" id="historyPanel">
+            <div class="left-overlay-header">
+                편집 기록
+                <button class="left-overlay-close" id="closeHistory">&times;</button>
+            </div>
+            <div class="left-overlay-body" id="historyPanelBody">
+                <div style="font-size:11px; color:#64748b; text-align:center; padding:12px 0;">편집 기록이 없습니다</div>
+            </div>
+        </div>
+
+        <!-- 좌측 오버레이: 레이어 -->
+        <div class="left-overlay-panel" id="layerPanel">
+            <div class="left-overlay-header">
+                레이어 관리
+                <button class="left-overlay-close" id="closeLayer">&times;</button>
+            </div>
+            <div class="left-overlay-body" id="layerPanelBody">
+                <div style="font-size:11px; color:#64748b; text-align:center; padding:12px 0;">편집 객체가 없습니다</div>
+            </div>
+        </div>
 
         <!-- 좌측: 슬라이드 목록 -->
         <div class="left-panel">
@@ -1144,14 +1424,6 @@
                 <button class="rp-btn" id="btnLogoOneRemove">현재 슬라이드만 삭제</button>
             </div>
 
-            <!-- Processed 기록 -->
-            <div class="rp-section" id="sectionProcessed">
-                <div class="rp-title">편집 기록</div>
-                <div class="processed-list" id="processedList">
-                    <div style="font-size:11px; color:#64748b; text-align:center; padding:12px 0;">편집 기록이 없습니다</div>
-                </div>
-            </div>
-
         </div>
     </div>
 
@@ -1262,7 +1534,8 @@
         spaceHeld: false,
         prevMode: null,
         selectedObject: null,
-        textItems: {}          // page -> { items, styles, viewport }
+        textItems: {},         // page -> { items, styles, viewport }
+        imageLayers: {}        // page -> [{type, src, name, x, y, w, h}]
     };
 
     const canvas = document.getElementById('mainCanvas');
@@ -1312,6 +1585,7 @@
             document.getElementById('totalPagesLabel').textContent = S.totalPages;
             S.currentPage = 1;
             S.editLayers = {};
+            S.imageLayers = {};
             S.originals = {};
             S.deletedPages.clear();
             buildThumbs();
@@ -1342,6 +1616,7 @@
         // 상태 초기화
         S.currentPage = 1;
         S.editLayers = {};
+        S.imageLayers = {};
         S.originals = {};
         S.deletedPages.clear();
 
@@ -1412,29 +1687,41 @@
     function buildBottomBar() {
         const bar = document.getElementById('bottomBar');
         bar.innerHTML = '';
-        const maxShow = 30;
-        for (let i = 1; i <= Math.min(S.totalPages, maxShow); i++) {
-            const btn = document.createElement('button');
-            btn.className = 'page-dot' + (i === S.currentPage ? ' active' : '');
-            if (S.deletedPages.has(i)) btn.classList.add('deleted');
-            btn.textContent = i;
-            btn.addEventListener('click', () => renderPage(i));
-            bar.appendChild(btn);
-        }
-        if (S.totalPages > maxShow) {
-            const more = document.createElement('span');
-            more.className = 'page-dot-more';
-            more.textContent = `... ${S.totalPages}`;
-            bar.appendChild(more);
-        }
+
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'nav-arrow';
+        prevBtn.id = 'navPrev';
+        prevBtn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>';
+        prevBtn.addEventListener('click', () => {
+            if (S.currentPage > 1) renderPage(S.currentPage - 1);
+        });
+
+        const pageInfo = document.createElement('span');
+        pageInfo.className = 'nav-page-info';
+        pageInfo.id = 'navPageInfo';
+        pageInfo.innerHTML = `${S.currentPage} <span>/ ${S.totalPages}</span>`;
+
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'nav-arrow';
+        nextBtn.id = 'navNext';
+        nextBtn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>';
+        nextBtn.addEventListener('click', () => {
+            if (S.currentPage < S.totalPages) renderPage(S.currentPage + 1);
+        });
+
+        bar.appendChild(prevBtn);
+        bar.appendChild(pageInfo);
+        bar.appendChild(nextBtn);
+        updateBottomBar();
     }
 
     function updateBottomBar() {
-        document.querySelectorAll('.page-dot').forEach(d => {
-            const p = parseInt(d.textContent);
-            d.classList.toggle('active', p === S.currentPage);
-            d.classList.toggle('deleted', S.deletedPages.has(p));
-        });
+        const info = document.getElementById('navPageInfo');
+        if (info) info.innerHTML = `${S.currentPage} <span>/ ${S.totalPages}</span>`;
+        const prev = document.getElementById('navPrev');
+        const next = document.getElementById('navNext');
+        if (prev) prev.disabled = S.currentPage <= 1;
+        if (next) next.disabled = S.currentPage >= S.totalPages;
     }
 
     // ═══════════════════════════════
@@ -1444,6 +1731,7 @@
         S.currentPage = p;
         S.selectedObject = null;
         container.querySelectorAll('.text-object').forEach(el => el.remove());
+        container.querySelectorAll('.image-object').forEach(el => el.remove());
 
         if (S.pdfDoc) {
             const page = await S.pdfDoc.getPage(p);
@@ -1451,24 +1739,22 @@
             canvas.width = vp.width;
             canvas.height = vp.height;
             await page.render({ canvasContext: ctx, viewport: vp }).promise;
+
+            // pdf.js 텍스트 메타데이터 캐시 (원본 속성 감지용)
+            if (!S.textItems[p]) {
+                const textContent = await page.getTextContent();
+                S.textItems[p] = {
+                    items: textContent.items,
+                    styles: textContent.styles,
+                    viewport: vp
+                };
+            }
         } else if (S.slideImages) {
             const img = await loadImg(S.slideImages[p - 1]);
             const ratio = S.scale / 2.0;
             canvas.width = Math.round(img.width * ratio);
             canvas.height = Math.round(img.height * ratio);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        }
-
-        await page.render({ canvasContext: ctx, viewport: vp }).promise;
-
-        // pdf.js 텍스트 메타데이터 캐시 (원본 속성 감지용)
-        if (!S.textItems[p]) {
-            const textContent = await page.getTextContent();
-            S.textItems[p] = {
-                items: textContent.items,
-                styles: textContent.styles,
-                viewport: vp
-            };
         }
 
         if (!S.originals[p]) {
@@ -1481,6 +1767,16 @@
             t.classList.toggle('active', parseInt(t.dataset.page) === p);
         });
         updateBottomBar();
+
+        // 이미지 객체 복원
+        if (S.imageLayers && S.imageLayers[p]) {
+            S.imageLayers[p].forEach(data => createImageObject(data));
+        }
+
+        // 레이어 패널 갱신
+        if (typeof activeLeftPanel !== 'undefined' && activeLeftPanel === 'layerPanel') {
+            refreshLayerPanel();
+        }
     }
 
     function reapplyEdits(p) {
@@ -2181,8 +2477,14 @@
         // 원본 복원 후 편집 내용을 캔버스에 그려서 썸네일 생성
         if (S.originals[p]) ctx.putImageData(S.originals[p], 0, 0);
         renderEditsToCanvas(p);
+        // 이미지 레이어도 캔버스에 그리기
+        const imgLayers = S.imageLayers[p] || [];
+        for (const il of imgLayers) {
+            const imgEl = await loadImg(il.src);
+            ctx.drawImage(imgEl, il.x, il.y, il.w, il.h);
+        }
         updateThumb(p);
-        // 다시 원본으로 복원 (DOM 텍스트 객체가 표시 담당)
+        // 다시 원본으로 복원 (DOM 텍스트/이미지 객체가 표시 담당)
         if (S.originals[p]) ctx.putImageData(S.originals[p], 0, 0);
     }
 
@@ -2309,11 +2611,74 @@
     // ═══════════════════════════════
     //  LOAD (PPTX 불러오기)
     // ═══════════════════════════════
-    document.getElementById('btnLoad').addEventListener('click', () => {
-        document.getElementById('pptxFileInput').click();
+    // ═══════════════════════════════
+    //  파일 열기 (PDF / PPTX)
+    // ═══════════════════════════════
+    document.getElementById('btnOpenFile').addEventListener('click', () => {
+        document.getElementById('openFileInput').click();
     });
 
-    document.getElementById('pptxFileInput').addEventListener('change', async (e) => {
+    document.getElementById('openFileInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        e.target.value = '';
+
+        const ext = file.name.split('.').pop().toLowerCase();
+
+        if (ext === 'pdf') {
+            showToast('PDF 불러오는 중...', 'success');
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+
+                // IndexedDB에 저장
+                const db = await openDB();
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                store.put(arrayBuffer, 'pdf_data');
+                store.put(file.name, 'pdf_fileName');
+                store.put(file.size, 'pdf_fileSize');
+                await new Promise((resolve, reject) => {
+                    tx.oncomplete = resolve;
+                    tx.onerror = reject;
+                });
+                db.close();
+
+                localStorage.setItem('pdf_type', 'pdf');
+                localStorage.setItem('pdf_fileName', file.name);
+                localStorage.setItem('pdf_fileSize', file.size.toString());
+
+                // 상태 초기화 후 PDF 모드로 로드
+                S.slideImages = null;
+                S.imageLayers = {};
+                await loadPdf(arrayBuffer, file.name);
+            } catch (err) {
+                console.error('PDF 불러오기 오류:', err);
+                showToast('PDF 불러오기 중 오류가 발생했습니다.', 'error');
+            }
+        } else if (ext === 'pptx') {
+            // 기존 PPTX 불러오기 로직 재사용
+            const fakeEvent = { target: { files: [file], value: '' } };
+            await handlePptxImport(fakeEvent);
+        } else {
+            showToast('PDF 또는 PPTX 파일만 지원합니다.', 'error');
+        }
+    });
+
+    document.getElementById('btnImportPptx').addEventListener('click', () => {
+        let pptxInput = document.getElementById('pptxFileInput');
+        if (!pptxInput) {
+            pptxInput = document.createElement('input');
+            pptxInput.type = 'file';
+            pptxInput.id = 'pptxFileInput';
+            pptxInput.accept = '.pptx';
+            pptxInput.style.display = 'none';
+            document.body.appendChild(pptxInput);
+            pptxInput.addEventListener('change', handlePptxImport);
+        }
+        pptxInput.click();
+    });
+
+    async function handlePptxImport(e) {
         const file = e.target.files[0];
         if (!file) return;
         e.target.value = '';
@@ -2374,6 +2739,7 @@
             S.totalPages = slideImages.length;
             S.currentPage = 1;
             S.editLayers = {};
+            S.imageLayers = {};
             S.originals = {};
             S.deletedPages.clear();
 
@@ -2390,7 +2756,7 @@
             console.error('PPTX 불러오기 오류:', err);
             showToast('PPTX 불러오기 중 오류가 발생했습니다.', 'error');
         }
-    });
+    }
 
     // ═══════════════════════════════
     //  SAVE (PPTX)
@@ -2462,6 +2828,13 @@
                     paintEditOnCanvas(scaled);
                 });
 
+                // 이미지 레이어도 export scale로 렌더링
+                const imgLayersForPage = S.imageLayers ? (S.imageLayers[i] || []) : [];
+                for (const il of imgLayersForPage) {
+                    const imgEl = await loadImg(il.src);
+                    ctx.drawImage(imgEl, Math.round(il.x * ratio), Math.round(il.y * ratio), Math.round(il.w * ratio), Math.round(il.h * ratio));
+                }
+
                 const imgData = canvas.toDataURL('image/png');
                 const slideW = 10;
                 const slideH = slideW * (canvas.height / canvas.width);
@@ -2494,8 +2867,10 @@
     //  PROCESSED LIST
     // ═══════════════════════════════
     function addProcessed(msg) {
-        const list = document.getElementById('processedList');
-        if (list.querySelector('div[style]')) list.innerHTML = '';
+        const list = document.getElementById('historyPanelBody');
+        // 빈 상태 메시지 제거
+        const empty = list.querySelector('div[style]');
+        if (empty) empty.remove();
         const item = document.createElement('div');
         item.className = 'processed-item';
         item.innerHTML = `<span class="processed-dot done"></span>${msg}`;
@@ -2641,6 +3016,448 @@
         t.className = 'toast ' + type;
         setTimeout(() => t.classList.add('show'), 10);
         setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // ═══════════════════════════════
+    //  좌측 아이콘 바 이벤트
+    // ═══════════════════════════════
+    let activeLeftPanel = null;
+
+    function toggleLeftPanel(panelId, iconBtn) {
+        const panel = document.getElementById(panelId);
+        const isOpen = panel.classList.contains('active');
+
+        // 모든 패널 닫기
+        document.querySelectorAll('.left-overlay-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.icon-bar-btn').forEach(b => b.classList.remove('active'));
+
+        if (!isOpen) {
+            panel.classList.add('active');
+            iconBtn.classList.add('active');
+            activeLeftPanel = panelId;
+            if (panelId === 'layerPanel') refreshLayerPanel();
+        } else {
+            activeLeftPanel = null;
+        }
+    }
+
+    document.getElementById('iconHistory').addEventListener('click', function() {
+        toggleLeftPanel('historyPanel', this);
+    });
+
+    document.getElementById('iconDelete').addEventListener('click', function() {
+        // 삭제 모드 토글 (기존 btnDeleteMode와 동일)
+        S.deleteMode = !S.deleteMode;
+        const btn = document.getElementById('btnDeleteMode');
+        btn.classList.toggle('active', S.deleteMode);
+        this.classList.toggle('active', S.deleteMode);
+        overlay.classList.toggle('delete-mode', S.deleteMode);
+        if (S.deleteMode) {
+            showToast('삭제 모드: 좌측 썸네일을 클릭하여 삭제할 슬라이드를 선택하세요');
+        }
+    });
+
+    document.getElementById('iconLayers').addEventListener('click', function() {
+        toggleLeftPanel('layerPanel', this);
+    });
+
+    document.getElementById('closeHistory').addEventListener('click', () => {
+        document.getElementById('historyPanel').classList.remove('active');
+        document.getElementById('iconHistory').classList.remove('active');
+        activeLeftPanel = null;
+    });
+
+    document.getElementById('closeLayer').addEventListener('click', () => {
+        document.getElementById('layerPanel').classList.remove('active');
+        document.getElementById('iconLayers').classList.remove('active');
+        activeLeftPanel = null;
+    });
+
+    // ═══════════════════════════════
+    //  레이어 관리
+    // ═══════════════════════════════
+    function refreshLayerPanel() {
+        const body = document.getElementById('layerPanelBody');
+        const layers = S.editLayers[S.currentPage] || [];
+        const imgLayers = S.imageLayers ? (S.imageLayers[S.currentPage] || []) : [];
+
+        if (layers.length === 0 && imgLayers.length === 0) {
+            body.innerHTML = '<div style="font-size:11px; color:#64748b; text-align:center; padding:12px 0;">편집 객체가 없습니다</div>';
+            return;
+        }
+
+        body.innerHTML = '';
+        let idx = 0;
+
+        // 텍스트 레이어
+        layers.forEach((l, i) => {
+            const item = document.createElement('div');
+            item.className = 'layer-item';
+            item.dataset.type = 'text';
+            item.dataset.index = i;
+            const preview = (l.text || '').substring(0, 20) || '(빈 텍스트)';
+            item.innerHTML = `
+                <div class="layer-icon text">T</div>
+                <div class="layer-info">
+                    <div class="layer-info-name">${preview}</div>
+                    <div class="layer-info-type">텍스트</div>
+                </div>
+                <div class="layer-actions">
+                    <button class="layer-action-btn" data-action="up" title="위로">&#9650;</button>
+                    <button class="layer-action-btn" data-action="down" title="아래로">&#9660;</button>
+                    <button class="layer-action-btn danger" data-action="delete" title="삭제">&#10005;</button>
+                </div>
+            `;
+            item.querySelectorAll('.layer-action-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleLayerAction(btn.dataset.action, 'text', i);
+                });
+            });
+            body.appendChild(item);
+            idx++;
+        });
+
+        // 이미지 레이어
+        imgLayers.forEach((l, i) => {
+            const item = document.createElement('div');
+            item.className = 'layer-item';
+            item.dataset.type = 'image';
+            item.dataset.index = i;
+            item.innerHTML = `
+                <div class="layer-icon image">&#128247;</div>
+                <div class="layer-info">
+                    <div class="layer-info-name">${l.name || '이미지'}</div>
+                    <div class="layer-info-type">이미지</div>
+                </div>
+                <div class="layer-actions">
+                    <button class="layer-action-btn" data-action="up" title="위로">&#9650;</button>
+                    <button class="layer-action-btn" data-action="down" title="아래로">&#9660;</button>
+                    <button class="layer-action-btn danger" data-action="delete" title="삭제">&#10005;</button>
+                </div>
+            `;
+            item.querySelectorAll('.layer-action-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleLayerAction(btn.dataset.action, 'image', i);
+                });
+            });
+            body.appendChild(item);
+        });
+    }
+
+    function handleLayerAction(action, type, index) {
+        const p = S.currentPage;
+        const arr = type === 'text' ? (S.editLayers[p] || []) : (S.imageLayers ? (S.imageLayers[p] || []) : []);
+
+        if (action === 'delete') {
+            if (type === 'text') {
+                const data = arr[index];
+                arr.splice(index, 1);
+                // DOM에서도 해당 텍스트 객체 제거
+                const objs = container.querySelectorAll('.text-object');
+                objs.forEach(obj => { if (obj._editData === data) obj.remove(); });
+                updateThumbFromSource(p);
+                addProcessed(`슬라이드 ${p} 텍스트 삭제`);
+            } else {
+                const data = arr[index];
+                arr.splice(index, 1);
+                const objs = container.querySelectorAll('.image-object');
+                objs.forEach(obj => { if (obj._imgData === data) obj.remove(); });
+                updateThumbFromSource(p);
+                addProcessed(`슬라이드 ${p} 이미지 삭제`);
+            }
+        } else if (action === 'up' && index > 0) {
+            [arr[index - 1], arr[index]] = [arr[index], arr[index - 1]];
+        } else if (action === 'down' && index < arr.length - 1) {
+            [arr[index], arr[index + 1]] = [arr[index + 1], arr[index]];
+        }
+
+        refreshLayerPanel();
+        showToast(action === 'delete' ? '객체 삭제됨' : '순서 변경됨', 'success');
+    }
+
+    // ═══════════════════════════════
+    //  이미지 추가 기능
+    // ═══════════════════════════════
+    document.getElementById('btnAddImage').addEventListener('click', () => {
+        document.getElementById('imageFileInput').click();
+    });
+
+    document.getElementById('imageFileInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        e.target.value = '';
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const dataUrl = ev.target.result;
+            const img = new Image();
+            img.onload = () => {
+                // 캔버스 크기 대비 적절한 초기 크기 계산
+                const maxW = canvas.width * 0.4;
+                const maxH = canvas.height * 0.4;
+                let w = img.width, h = img.height;
+                if (w > maxW) { h = h * (maxW / w); w = maxW; }
+                if (h > maxH) { w = w * (maxH / h); h = maxH; }
+
+                const imgData = {
+                    type: 'image',
+                    src: dataUrl,
+                    name: file.name,
+                    x: 20,
+                    y: 20,
+                    w: Math.round(w),
+                    h: Math.round(h),
+                    naturalW: img.width,
+                    naturalH: img.height
+                };
+
+                if (!S.imageLayers[S.currentPage]) S.imageLayers[S.currentPage] = [];
+                S.imageLayers[S.currentPage].push(imgData);
+
+                createImageObject(imgData);
+                addProcessed(`슬라이드 ${S.currentPage} 이미지 추가`);
+                showToast('이미지 추가 완료', 'success');
+                if (activeLeftPanel === 'layerPanel') refreshLayerPanel();
+            };
+            img.src = dataUrl;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function createImageObject(data) {
+        const div = document.createElement('div');
+        div.className = 'image-object';
+        div.style.left = data.x + 'px';
+        div.style.top = data.y + 'px';
+        div.style.width = data.w + 'px';
+        div.style.height = data.h + 'px';
+
+        const img = document.createElement('img');
+        img.src = data.src;
+        img.draggable = false;
+        div.appendChild(img);
+
+        // 액션 버튼
+        const actions = document.createElement('div');
+        actions.className = 'text-object-actions';
+        const btnDel = document.createElement('button');
+        btnDel.className = 'to-btn to-btn-del';
+        btnDel.innerHTML = '&#10005;';
+        btnDel.title = '삭제';
+        actions.appendChild(btnDel);
+        div.appendChild(actions);
+
+        // 리사이즈 핸들
+        const handle = document.createElement('div');
+        handle.className = 'image-resize-handle br';
+        div.appendChild(handle);
+
+        div._imgData = data;
+
+        // 클릭 → 선택
+        div.addEventListener('mousedown', (e) => {
+            if (e.target === handle) return;
+            if (S.mode !== 'select') return;
+            e.stopPropagation();
+            selectImageObject(div);
+
+            const startX = e.clientX, startY = e.clientY;
+            const origLeft = parseInt(div.style.left), origTop = parseInt(div.style.top);
+
+            function onMove(ev) {
+                div.style.left = (origLeft + ev.clientX - startX) + 'px';
+                div.style.top = (origTop + ev.clientY - startY) + 'px';
+            }
+            function onUp() {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                data.x = parseInt(div.style.left);
+                data.y = parseInt(div.style.top);
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+
+        // 리사이즈
+        handle.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const startX = e.clientX, startY = e.clientY;
+            const origW = parseInt(div.style.width), origH = parseInt(div.style.height);
+            const ratio = origW / origH;
+
+            function onMove(ev) {
+                const dw = ev.clientX - startX;
+                let newW = Math.max(30, origW + dw);
+                let newH = newW / ratio;
+                div.style.width = Math.round(newW) + 'px';
+                div.style.height = Math.round(newH) + 'px';
+            }
+            function onUp() {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                data.w = parseInt(div.style.width);
+                data.h = parseInt(div.style.height);
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+
+        // 삭제
+        btnDel.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const layers = S.imageLayers[S.currentPage];
+            if (layers) {
+                const idx = layers.indexOf(data);
+                if (idx !== -1) layers.splice(idx, 1);
+            }
+            div.remove();
+            addProcessed(`슬라이드 ${S.currentPage} 이미지 삭제`);
+            showToast('이미지 삭제됨', 'success');
+            if (activeLeftPanel === 'layerPanel') refreshLayerPanel();
+        });
+
+        container.appendChild(div);
+        return div;
+    }
+
+    function selectImageObject(div) {
+        container.querySelectorAll('.image-object.selected').forEach(el => el.classList.remove('selected'));
+        container.querySelectorAll('.text-object.selected').forEach(el => el.classList.remove('selected'));
+        div.classList.add('selected');
+    }
+
+    // ═══════════════════════════════
+    //  PDF 내보내기
+    // ═══════════════════════════════
+    document.getElementById('btnExportPdf').addEventListener('click', () => {
+        savePdf();
+    });
+
+    async function savePdf() {
+        const prog = document.getElementById('exportProgress');
+        const bar = document.getElementById('exportProgressBar');
+        const txt = document.getElementById('exportProgressText');
+        document.getElementById('exportBtns').style.display = 'none';
+        prog.style.display = 'block';
+        document.getElementById('exportModal').classList.add('active');
+
+        // 모달 제목 변경
+        document.querySelector('#exportModal .modal-box h3').textContent = 'PDF로 내보내기';
+        document.querySelector('#exportModal .modal-box p').textContent = '편집된 슬라이드를 PDF 파일로 저장합니다.';
+
+        try {
+            const { jsPDF } = window.jspdf;
+            const savedPage = S.currentPage;
+            const exportScale = 2.0;
+            const activePages = [];
+
+            for (let i = 1; i <= S.totalPages; i++) {
+                if (!S.deletedPages.has(i)) activePages.push(i);
+            }
+
+            // 첫 페이지 렌더링으로 비율 파악
+            let firstW, firstH;
+            if (S.pdfDoc) {
+                const page = await S.pdfDoc.getPage(activePages[0]);
+                const vp = page.getViewport({ scale: exportScale });
+                firstW = vp.width;
+                firstH = vp.height;
+            } else if (S.slideImages) {
+                const img = await loadImg(S.slideImages[activePages[0] - 1]);
+                firstW = img.width;
+                firstH = img.height;
+            }
+
+            const orientation = firstW > firstH ? 'landscape' : 'portrait';
+            const pdf = new jsPDF({
+                orientation: orientation,
+                unit: 'px',
+                format: [firstW, firstH]
+            });
+
+            for (let idx = 0; idx < activePages.length; idx++) {
+                const i = activePages[idx];
+                const pct = Math.round(((idx + 1) / activePages.length) * 100);
+                bar.style.width = pct + '%';
+                txt.textContent = `슬라이드 ${i} / ${S.totalPages} 저장 중... (${pct}%)`;
+
+                if (idx > 0) pdf.addPage([firstW, firstH], orientation);
+
+                if (S.pdfDoc) {
+                    const page = await S.pdfDoc.getPage(i);
+                    const vp = page.getViewport({ scale: exportScale });
+                    canvas.width = vp.width;
+                    canvas.height = vp.height;
+                    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+                } else if (S.slideImages) {
+                    const img = await loadImg(S.slideImages[i - 1]);
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                }
+
+                // 텍스트 편집 내용 렌더링
+                const ratio = S.pdfDoc ? (exportScale / S.scale) : (canvas.width / (S.originals[i] ? S.originals[i].width : canvas.width));
+                (S.editLayers[i] || []).forEach(l => {
+                    const scaled = {
+                        bgColor: l.bgColor,
+                        text: l.text,
+                        padding: Math.round(l.padding * ratio),
+                        rect: {
+                            x: Math.round(l.rect.x * ratio),
+                            y: Math.round(l.rect.y * ratio),
+                            w: Math.round(l.rect.w * ratio),
+                            h: Math.round(l.rect.h * ratio)
+                        },
+                        styles: {
+                            ...l.styles,
+                            fontSize: Math.round(l.styles.fontSize * ratio),
+                            letterSpacing: l.styles.letterSpacing * ratio
+                        }
+                    };
+                    paintEditOnCanvas(scaled);
+                });
+
+                // 이미지 레이어 렌더링
+                const imgLayers = S.imageLayers[i] || [];
+                for (const il of imgLayers) {
+                    const imgEl = await loadImg(il.src);
+                    const sx = ratio;
+                    ctx.drawImage(imgEl, Math.round(il.x * sx), Math.round(il.y * sx), Math.round(il.w * sx), Math.round(il.h * sx));
+                }
+
+                const imgData = canvas.toDataURL('image/jpeg', 0.92);
+                pdf.addImage(imgData, 'JPEG', 0, 0, firstW, firstH);
+
+                await new Promise(r => setTimeout(r, 50));
+            }
+
+            txt.textContent = 'PDF 파일 생성 중...';
+            const fileName = (localStorage.getItem('pdf_fileName') || 'slides').replace(/\.(pdf|pptx)$/i, '');
+            pdf.save(fileName + '.pdf');
+
+            await renderPage(savedPage);
+            document.getElementById('exportModal').classList.remove('active');
+
+            // 모달 복원
+            document.querySelector('#exportModal .modal-box h3').textContent = 'PPTX로 내보내기';
+            document.querySelector('#exportModal .modal-box p').textContent = '편집된 슬라이드를 PowerPoint(.pptx) 파일로 저장합니다.';
+            document.getElementById('exportBtns').style.display = 'flex';
+            prog.style.display = 'none';
+
+            showToast(`PDF 저장 완료 (${activePages.length}슬라이드)`, 'success');
+            addProcessed(`PDF 저장 (${activePages.length}장)`);
+        } catch (err) {
+            console.error(err);
+            prog.style.display = 'none';
+            document.getElementById('exportBtns').style.display = 'flex';
+            document.querySelector('#exportModal .modal-box h3').textContent = 'PPTX로 내보내기';
+            document.querySelector('#exportModal .modal-box p').textContent = '편집된 슬라이드를 PowerPoint(.pptx) 파일로 저장합니다.';
+            showToast('PDF 저장 중 오류 발생', 'error');
+        }
     }
 
     // ═══ START ═══
