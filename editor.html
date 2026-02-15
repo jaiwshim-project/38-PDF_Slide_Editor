@@ -2953,26 +2953,21 @@
     // 뷰포트에 맞는 최적 줌 비율 계산
     async function calcFitScale(page) {
         const vpEl = document.getElementById('canvasViewport');
-        const availW = vpEl.clientWidth - 60;
-        const availH = vpEl.clientHeight - 60;
+        const availW = vpEl.clientWidth - 80;
+        const availH = vpEl.clientHeight - 80;
 
         if (S.pdfDoc) {
             if (!page) page = await S.pdfDoc.getPage(S.currentPage);
             const baseVp = page.getViewport({ scale: 1 });
             const scaleW = availW / baseVp.width;
             const scaleH = availH / baseVp.height;
-            const fit = Math.min(scaleW, scaleH) * 0.9;
+            const fit = Math.min(scaleW, scaleH) * 0.75;
             return Math.max(0.3, Math.min(3, fit));
         } else if (S.slideImages) {
-            // PPTX 모드: 이미지 원본 크기 기준
             const img = await loadImg(S.slideImages[S.currentPage - 1]);
-            // PPTX renderPage에서 ratio = scale / 2.0 이므로,
-            // 캔버스 크기 = img.width * (scale / 2.0)
-            // 화면에 맞추려면: img.width * (scale / 2.0) = availW
-            // → scale = availW / img.width * 2.0
             const scaleW = (availW / img.width) * 2.0;
             const scaleH = (availH / img.height) * 2.0;
-            const fit = Math.min(scaleW, scaleH) * 0.9;
+            const fit = Math.min(scaleW, scaleH) * 0.75;
             return Math.max(0.3, Math.min(3, fit));
         }
         return 1;
