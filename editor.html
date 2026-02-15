@@ -2961,13 +2961,13 @@
             const baseVp = page.getViewport({ scale: 1 });
             const scaleW = availW / baseVp.width;
             const scaleH = availH / baseVp.height;
-            const fit = Math.min(scaleW, scaleH) * 0.75;
+            const fit = Math.min(scaleW, scaleH) * 0.55;
             return Math.max(0.3, Math.min(3, fit));
         } else if (S.slideImages) {
             const img = await loadImg(S.slideImages[S.currentPage - 1]);
             const scaleW = (availW / img.width) * 2.0;
             const scaleH = (availH / img.height) * 2.0;
-            const fit = Math.min(scaleW, scaleH) * 0.75;
+            const fit = Math.min(scaleW, scaleH) * 0.55;
             return Math.max(0.3, Math.min(3, fit));
         }
         return 1;
