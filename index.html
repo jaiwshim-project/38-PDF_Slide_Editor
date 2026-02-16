@@ -697,7 +697,7 @@
                     </svg>
                 </div>
                 <p class="upload-text">PDF 또는 PPTX 파일을 드래그하거나 클릭하여 업로드</p>
-                <p class="upload-hint"><span>파일 선택</span> 또는 여기에 드롭하세요 (PDF/PPTX, 최대 50MB)</p>
+                <p class="upload-hint"><span>파일 선택</span> 또는 여기에 드롭하세요 (PDF/PPTX, 최대 500MB)</p>
                 <div class="upload-loading" id="uploadLoading">
                     <div class="spinner"></div>
                     <span>PDF를 분석하고 있습니다...</span>
@@ -851,7 +851,7 @@
     <div class="toast" id="toast"></div>
 
     <script>
-        // ═══ IndexedDB 기반 저장 (50MB 지원) + localStorage 폴백 ═══
+        // ═══ IndexedDB 기반 저장 (500MB 지원) + localStorage 폴백 ═══
         const DB_NAME = 'PdfSlideEditorDB';
         const DB_VERSION = 1;
         const STORE_NAME = 'pdfFiles';
@@ -1046,8 +1046,8 @@
                 return;
             }
 
-            if (file.size > 50 * 1024 * 1024) {
-                showToast('파일 크기는 50MB를 초과할 수 없습니다.', 'error');
+            if (file.size > 500 * 1024 * 1024) {
+                showToast('파일 크기는 500MB를 초과할 수 없습니다.', 'error');
                 return;
             }
 
